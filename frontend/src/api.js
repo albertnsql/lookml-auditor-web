@@ -1,6 +1,6 @@
 // api.js — All fetch helpers for the LookML Auditor API
 
-const BASE = '/api';
+const BASE = 'https://lookml-auditor-web.onrender.com/api';
 
 async function _fetch(url, options = {}) {
   const res = await fetch(BASE + url, options);
