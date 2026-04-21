@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { id: 'visuals',    icon: <IconVisuals />,    label: 'Visualizations' },
   { id: 'inventory',  icon: <IconInventory />,  label: 'Inventory' },
   { id: 'fileviewer', icon: <IconFile />,       label: 'File Viewer' },
+  { id: 'rules',      icon: <IconRules />,      label: 'Audit Rules' },
   { id: 'settings',   icon: <IconSettings />,   label: 'Settings' },
 ];
 
@@ -53,7 +54,13 @@ export default function Dashboard({ auditData, isLoading, onReset }) {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => {
+                    if (item.id === 'rules') {
+                      window.location.href = '/rules';
+                    } else {
+                      setActiveTab(item.id);
+                    }
+                  }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '10px',
                     width: '100%', height: '40px', padding: '0 16px', borderRadius: '8px',
@@ -172,3 +179,4 @@ function IconVisuals()   { return <Ico><line x1="18" y1="20" x2="18" y2="10"/><l
 function IconInventory() { return <Ico><path d="M21 8v13H8V8zM3 16V3h13"/></Ico>; }
 function IconFile()      { return <Ico><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></Ico>; }
 function IconSettings()  { return <Ico><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></Ico>; }
+function IconRules()     { return <Ico><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></Ico>; }

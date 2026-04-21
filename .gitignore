@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+*.pyc
+
+# Ignore Web folder
+#lookml-auditor-web/
+
+backend/__pycache__/*.pyc
