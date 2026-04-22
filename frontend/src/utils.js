@@ -1,9 +1,19 @@
 // Shared utilities used across tabs
 
+const healthConfig = {
+  'Healthy':         { bg: '#DCFCE7', color: '#15803D', dot: '#22C55E' },
+  'Good':            { bg: '#FEF9C3', color: '#A16207', dot: '#EAB308' },
+  'Needs Attention': { bg: '#FFEDD5', color: '#C2410C', dot: '#F97316' },
+  'Critical':        { bg: '#FEE2E2', color: '#B91C1C', dot: '#EF4444' },
+};
+
 export function scoreMeta(s) {
-  if (s >= 85) return { color: 'var(--success)', label: 'Healthy' };
-  if (s >= 60) return { color: 'var(--warning)', label: 'Needs Attention' };
-  return { color: 'var(--error)', label: 'Critical' };
+  let label = 'Critical';
+  if (s >= 90)      label = 'Healthy';
+  else if (s >= 80) label = 'Good';
+  else if (s >= 70) label = 'Needs Attention';
+  
+  return { ...healthConfig[label], label };
 }
 
 export function severityColor(sev) {

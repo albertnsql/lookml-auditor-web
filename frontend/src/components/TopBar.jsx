@@ -2,7 +2,7 @@ import React from 'react';
 import { scoreMeta } from '../utils';
 
 export default function TopBar({ result, onReset }) {
-  const { color, label } = scoreMeta(result.health_score);
+  const { bg, color, dot, label } = scoreMeta(result.health_score);
   const isGithub = result.source_type === 'github';
 
   return (
@@ -22,17 +22,17 @@ export default function TopBar({ result, onReset }) {
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: '6px',
           padding: '4px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: 600,
-          background: '#DCFCE7', color: '#15803D',
-          border: '1px solid #BBF7D0',
+          background: bg, color: color,
+          border: `1px solid ${color}20`,
           fontFamily: 'Sora, sans-serif',
           fontVariantNumeric: 'tabular-nums',
           transition: 'box-shadow 150ms ease',
           cursor: 'default'
         }}
-        onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 2px 8px rgba(9,165,90,0.2)'}
+        onMouseEnter={(e) => e.currentTarget.style.boxShadow = `0 2px 8px ${color}20`}
         onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
         >
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#15803D', flexShrink: 0 }} />
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot, flexShrink: 0 }} />
           <span>{label} · {result.health_score}/100</span>
         </span>
       </div>

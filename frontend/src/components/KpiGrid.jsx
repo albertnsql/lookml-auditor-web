@@ -31,14 +31,14 @@ const TIPS = {
   'Derived Tables': 'PDTs and NDTs detected across all views.',
   'Dimensions':     'Total dimension fields across all views.',
   'Measures':       'Total measure fields across all views.',
-  'Orphan Views':   'Views defined but never joined into any explore.',
-  'Zombies':        'Explores whose base view does not exist in the project.',
-  'Missing PK':     'Views missing a primary_key: yes dimension.',
+  'Orphan Views':   'Views that are defined in .lkml files but never joined into any Explore. They\'re invisible to end users but still parsed by Looker on every project load, adding unnecessary overhead. Safe to delete if confirmed unused.',
+  'Zombies':        'Explores or Views that exist in the project but contain zero dimensions and zero measures — essentially empty shells. Unlike Orphan Views (which have fields but no Explore), Zombies are structurally incomplete. They may be placeholders from incomplete migrations or leftover scaffolding.',
+  'Missing PK':     'Views missing a dimension with primary_key: yes. Without a declared primary key, Looker cannot accurately detect fanout in joins — this can silently inflate metric values (e.g. revenue appearing 3x higher) when the view is joined to a fact table with a one-to-many relationship.',
   'No Label':       'Fields missing a label — shows technical names in the UI.',
   'No Description': 'Fields with no description — hurts self-service usability.',
 };
 
-export default function KpiGrid({ result, filters }) {
+export default function KpiGrid({ result, filters, onKpiClick }) {
   const { views, explores, issues, health_score, category_scores } = result;
   const fv = filterViews(views, filters);
   const fe = filterExplores(explores, filters);
@@ -70,10 +70,10 @@ export default function KpiGrid({ result, filters }) {
 
       {/* ── Tier 1 — 2fr hero + 3 × 1fr ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '12px', marginBottom: '12px', width: '100%' }}>
-        <HeroCard health={health_score} color={hsColor} label={hsLabel} miniScores={miniScores} animDelay={100} />
-        <KpiCard label="Total Issues" value={fi.length}        valueColor="var(--text-1)"                                          dur={600} delay={160} animIdx={1} contextStr={`across ${fv.length} views`} />
-        <KpiCard label="Errors"       value={errors.length}   valueColor={errors.length   > 0 ? 'var(--error)'   : 'var(--text-1)'} dur={600} delay={220} animIdx={2} contextStr={errors.length > 0 ? 'critical · fix required' : 'all clear'} />
-        <KpiCard label="Warnings"     value={warnings.length} valueColor={warnings.length > 0 ? 'var(--warning)' : 'var(--text-1)'} dur={600} delay={280} animIdx={3} contextStr={warnings.length > 0 ? 'needs review' : 'all clear'} />
+        <HeroCard health={health_score} miniScores={miniScores} animDelay={100} />
+        <KpiCard label="Total Issues" value={fi.length}        valueColor="var(--text-1)"                                          dur={600} delay={160} animIdx={1} contextStr={`across ${fv.length} views`} onClick={() => onKpiClick?.('total')} />
+        <KpiCard label="Errors"       value={errors.length}   valueColor={errors.length   > 0 ? 'var(--error)'   : 'var(--text-1)'} dur={600} delay={220} animIdx={2} contextStr={errors.length > 0 ? 'critical · fix required' : 'all clear'} onClick={() => onKpiClick?.('errors')} />
+        <KpiCard label="Warnings"     value={warnings.length} valueColor={warnings.length > 0 ? 'var(--warning)' : 'var(--text-1)'} dur={600} delay={280} animIdx={3} contextStr={warnings.length > 0 ? 'needs review' : 'all clear'} onClick={() => onKpiClick?.('warnings')} />
       </div>
 
       {/* ── Tier 2 ── */}
@@ -92,11 +92,11 @@ export default function KpiGrid({ result, filters }) {
       {/* ── Tier 3 ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', width: '100%' }}>
         {[
-          { label: 'Orphan Views',    value: orphans.length,  valueColor: orphans.length  > 0 ? 'var(--warning)' : 'var(--text-1)' },
+          { label: 'Orphan Views',    value: orphans.length,  valueColor: orphans.length  > 0 ? 'var(--warning)' : 'var(--text-1)', onClick: () => onKpiClick?.('orphan_views') },
           { label: 'Zombies',         value: zombies.length,  valueColor: zombies.length  > 0 ? 'var(--error)'   : 'var(--text-1)' },
-          { label: 'Missing PK',      value: missingPk.length,valueColor: missingPk.length> 0 ? 'var(--warning)' : 'var(--text-1)' },
-          { label: 'No Label',        value: noLabel.length,  valueColor: 'var(--text-2)' },
-          { label: 'No Description',  value: noDesc.length,   valueColor: 'var(--text-2)' },
+          { label: 'Missing PK',      value: missingPk.length,valueColor: missingPk.length> 0 ? 'var(--warning)' : 'var(--text-1)', onClick: () => onKpiClick?.('missing_pk') },
+          { label: 'No Label',        value: noLabel.length,  valueColor: 'var(--text-2)', onClick: () => onKpiClick?.('no_label') },
+          { label: 'No Description',  value: noDesc.length,   valueColor: 'var(--text-2)', onClick: () => onKpiClick?.('no_description') },
         ].map((k, i) => (
           <KpiCard key={k.label} {...k} dur={400} delay={450 + i * 40} animIdx={i} />
         ))}
@@ -106,13 +106,10 @@ export default function KpiGrid({ result, filters }) {
 }
 
 // ── Hero Card ─────────────────────────────────────────────────
-function HeroCard({ health, color, label, miniScores, animDelay = 0 }) {
+function HeroCard({ health, miniScores, animDelay = 0 }) {
   const displayed = useCountUp(health, 800, animDelay);
   const [hovered, setHovered] = useState(false);
-
-  const isHealthy = health >= 85;
-  const pillColor = isHealthy ? '#15803D' : health >= 60 ? 'var(--warning)' : 'var(--error)';
-  const pillBg    = isHealthy ? '#DCFCE7' : health >= 60 ? '#FEF3C7' : '#FEE2E2';
+  const { bg, color, dot, label } = scoreMeta(health);
 
   return (
     <div
@@ -144,8 +141,8 @@ function HeroCard({ health, color, label, miniScores, animDelay = 0 }) {
           {displayed}<span style={{ fontSize: '22px', fontWeight: 500, color: 'var(--text-3)' }}>/100</span>
         </div>
         <div style={{ marginTop: '10px' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: pillBg, color: pillColor, borderRadius: '20px', padding: '4px 12px', fontSize: '12px', fontFamily: 'Sora, sans-serif', fontWeight: 600 }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: pillColor }} />
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: bg, color: color, borderRadius: '20px', padding: '4px 12px', fontSize: '12px', fontFamily: 'Sora, sans-serif', fontWeight: 600 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot }} />
             {label}
           </span>
         </div>
@@ -184,22 +181,25 @@ function MiniBar({ label, score, delay }) {
 }
 
 // ── KPI Card ──────────────────────────────────────────────────
-function KpiCard({ label, value, valueColor = 'var(--text-1)', dur = 600, delay = 0, animIdx = 0, contextStr = '' }) {
+function KpiCard({ label, value, valueColor = 'var(--text-1)', dur = 600, delay = 0, animIdx = 0, contextStr = '', onClick }) {
   const count = useCountUp(typeof value === 'number' ? value : 0, dur, delay);
   const displayed = typeof value === 'number' ? count.toLocaleString() : value;
   const tip = TIPS[label];
   const [tipVisible, setTipVisible] = useState(false);
   const [hovered, setHovered] = useState(false);
 
+  const isClickable = !!onClick;
+
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={onClick}
       style={{
         display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '100px',
         background: hovered ? 'linear-gradient(135deg,#FFFFFF,#FAFBFF)' : '#FFFFFF',
-        border: `1px solid ${hovered ? 'rgba(99,91,255,0.35)' : 'var(--border)'}`,
-        borderTop: `3px solid ${hovered ? 'var(--accent)' : 'transparent'}`,
+        border: `1px solid ${hovered ? (isClickable ? 'rgba(99,91,255,0.35)' : 'rgba(99,91,255,0.35)') : 'var(--border)'}`,
+        borderTop: `3px solid ${hovered ? (isClickable ? 'var(--accent)' : 'var(--accent)') : 'transparent'}`,
         borderRadius: '8px',
         padding: '18px 18px 16px',
         boxShadow: hovered
@@ -208,7 +208,8 @@ function KpiCard({ label, value, valueColor = 'var(--text-1)', dur = 600, delay 
         transition: 'all 150ms ease',
         position: 'relative',
         animation: `fadeSlideUp 300ms ease-out ${delay}ms both`,
-        cursor: 'default',
+        cursor: isClickable ? 'pointer' : 'default',
+        transform: hovered && isClickable ? 'translateY(-2px)' : 'translateY(0)',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -244,6 +245,22 @@ function KpiCard({ label, value, valueColor = 'var(--text-1)', dur = 600, delay 
       {contextStr && (
         <div style={{ fontSize: '12px', color: valueColor === 'var(--error)' ? 'var(--error)' : valueColor === 'var(--warning)' ? 'var(--warning)' : 'var(--text-3)', marginTop: '4px', fontFamily: 'Sora, sans-serif', fontWeight: valueColor === 'var(--text-1)' ? 400 : 500 }}>
           {contextStr}
+        </div>
+      )}
+
+      {isClickable && (
+        <div style={{
+          font: '11px Sora', fontWeight: 600,
+          color: 'var(--text-3)', marginTop: '8px',
+          display: 'flex', alignItems: 'center', gap: '4px',
+          opacity: hovered ? 1 : 0,
+          transition: 'opacity 150ms ease'
+        }}>
+          View in Issues
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+            <polyline points="12 5 19 12 12 19"/>
+          </svg>
         </div>
       )}
     </div>

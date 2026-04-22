@@ -41,7 +41,7 @@ export default function OverviewTab({ result }) {
         {/* Col 1 — Project Health: Radial Score Card */}
         <div className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div className="section-label" style={{ marginBottom: '16px' }}>Project Health</div>
-          <RadialScoreCard score={health_score} label={hsLabel} color={hsColor} catScores={catScores} />
+          <RadialScoreCard score={health_score} catScores={catScores} />
         </div>
 
         {/* Col 2 — Issues by Category: Ranked Bar Chart */}
@@ -161,8 +161,9 @@ export default function OverviewTab({ result }) {
 }
 
 // ── Radial Score Card ─────────────────────────────────────────
-function RadialScoreCard({ score, label, color, catScores }) {
+function RadialScoreCard({ score, catScores }) {
   const [animScore, setAnimScore] = useState(0);
+  const { bg, color, label } = scoreMeta(score);
 
   const cx = 150, cy = 140, r = 120;
   const pathLength = Math.PI * r;
@@ -173,10 +174,6 @@ function RadialScoreCard({ score, label, color, catScores }) {
   }, [score]);
 
   const offset = pathLength - (animScore / 100) * pathLength;
-  const dynColor = score >= 90 ? 'var(--success)' : score >= 80 ? 'var(--warning)' : 'var(--error)';
-  const badgeBg  = score >= 90 ? '#DCFCE7' : score >= 80 ? '#FEF3C7' : '#FEE2E2';
-  const badgeCol = score >= 90 ? '#15803D' : score >= 80 ? 'var(--warning)' : 'var(--error)';
-
   const ticks = [70, 80, 90];
 
   return (
@@ -188,7 +185,7 @@ function RadialScoreCard({ score, label, color, catScores }) {
           <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`} fill="none" stroke="#E2DFF5" strokeWidth="16" strokeLinecap="round" />
           
           {/* Fill track */}
-          <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`} fill="none" stroke={dynColor} strokeWidth="16" strokeLinecap="round" 
+          <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`} fill="none" stroke={color} strokeWidth="16" strokeLinecap="round" 
                 strokeDasharray={pathLength} strokeDashoffset={offset}
                 style={{ transition: 'stroke-dashoffset 900ms cubic-bezier(0.34, 1.56, 0.64, 1)' }} />
 
@@ -217,7 +214,7 @@ function RadialScoreCard({ score, label, color, catScores }) {
         </svg>
 
         {/* Healthy Badge */}
-        <div style={{ position: 'absolute', top: '138px', left: '50%', transform: 'translateX(-50%)', background: badgeBg, color: badgeCol, borderRadius: '20px', padding: '4px 14px', fontSize: '13px', fontFamily: 'Sora, sans-serif', fontWeight: 600 }}>
+        <div style={{ position: 'absolute', top: '138px', left: '50%', transform: 'translateX(-50%)', background: bg, color: color, borderRadius: '20px', padding: '4px 14px', fontSize: '13px', fontFamily: 'Sora, sans-serif', fontWeight: 600 }}>
           {label}
         </div>
       </div>
@@ -239,7 +236,7 @@ function ScorePill({ label, score }) {
     return () => clearTimeout(t);
   }, [score]);
 
-  const color = score >= 90 ? 'var(--success)' : score >= 80 ? 'var(--warning)' : 'var(--error)';
+  const { color } = scoreMeta(score);
   
   const displayLabel = label === 'Broken Reference' ? 'BROKEN REFERENCE' :
                        label === 'Duplicate Def'    ? 'DUPLICATE DEFINITION' :

@@ -2,22 +2,20 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 
 const gridCols = '80px 130px 130px 1fr 150px 130px 45px';
 
-export default function IssuesTab({ auditData, isLoading }) {
+export default function IssuesTab({ auditData, isLoading, externalFilters, onFilterChange }) {
   const { issues } = auditData;
 
-  // ── Filter State ──
-  const [filters, setFilters] = useState({
-    severity: ['error', 'warning', 'info'],
-    category: 'all',
-    file: null,
-    search: ''
-  });
+  const filters = externalFilters;
+  const setFilters = onFilterChange;
+
   const [selectedFile, setSelectedFile] = useState(null);
 
   // Sync selectedFile with filters.file
   useEffect(() => {
-    setFilters(f => ({ ...f, file: selectedFile }));
-  }, [selectedFile]);
+    if (selectedFile !== filters.file) {
+      setFilters(f => ({ ...f, file: selectedFile }));
+    }
+  }, [selectedFile, filters.file, setFilters]);
 
   // ── Insight Computations ──
   const quickWins = useMemo(() => {
@@ -175,6 +173,34 @@ export default function IssuesTab({ auditData, isLoading }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', animation: 'fadeSlideUp 400ms ease-out 200ms both', maxWidth: '100%', overflowX: 'hidden' }}>
       
+      {/* ── Filter Banner ── */}
+      {(filters.severity.length < 3 || filters.category !== 'all' || filters.search) && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: '#EEF2FF', border: '1px solid rgba(99,91,255,0.2)',
+          borderRadius: '8px', padding: '10px 16px', marginBottom: '0px'
+        }}>
+          <span style={{ font: '13px Sora', fontWeight: 600, color: '#635BFF' }}>
+            Filtered by: {
+              filters.severity.length < 3 ? `${filters.severity.join(', ')} severity` : 
+              filters.category !== 'all' ? `category: ${filters.category}` :
+              filters.search ? `search: "${filters.search}"` : 'active filters'
+            }
+          </span>
+          <button
+            onClick={() => setFilters({
+              severity: ['error', 'warning', 'info'],
+              category: 'all',
+              file: null,
+              search: ''
+            })}
+            style={{ background: 'none', border: 'none', color: '#635BFF', cursor: 'pointer', font: '12px Sora', fontWeight: 600 }}
+          >
+            Clear all filters ✕
+          </button>
+        </div>
+      )}
+
       {/* ── Section 1: Three Actionable Insight Cards ── */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
         

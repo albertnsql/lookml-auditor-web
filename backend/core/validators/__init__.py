@@ -103,7 +103,42 @@ def compute_health_score(issues: list[Issue], project: LookMLProject | None = No
         s_quality * 0.15
     )
 
+    # ── Critical Error Penalty Caps (v2.1) ────────────────────────────────
+    errors = [i for i in issues if i.severity == Severity.ERROR]
+    error_count = len(errors)
+
+    # Critical cap rules — errors in these categories are explore-breaking
+    breaking_categories = {
+        IssueCategory.BROKEN_REFERENCE,
+        IssueCategory.JOIN_INTEGRITY,
+        IssueCategory.DUPLICATE
+    }
+    breaking_errors = [
+        i for i in errors
+        if i.category in breaking_categories
+    ]
+
+    # Apply caps based on breaking error count
+    if len(breaking_errors) >= 5:
+        score = min(score, 70)   # 5+ breaking errors — max 70
+    elif len(breaking_errors) >= 3:
+        score = min(score, 80)   # 3-4 breaking errors — max 80
+    elif len(breaking_errors) >= 1:
+        score = min(score, 88)   # 1-2 breaking errors — max 88
+
+    # Any errors at all cap at 92
+    if error_count > 0:
+        score = min(score, 92)
+
     return max(0, min(100, int(score)))
+
+
+def get_health_status(score: int) -> str:
+    """Return a status label based on the final health score."""
+    if score >= 90:   return 'Healthy'
+    elif score >= 80: return 'Good'
+    elif score >= 70: return 'Needs Attention'
+    else:             return 'Critical'
 
 
 def compute_category_scores(issues: list[Issue],
@@ -131,5 +166,6 @@ def compute_category_scores(issues: list[Issue],
 
 __all__ = [
     "run_all_checks", "compute_health_score", "compute_category_scores",
+    "get_health_status",
     "Issue", "IssueCategory", "Severity",
 ]
