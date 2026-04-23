@@ -656,7 +656,7 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
             fill="none"
             style={{ animation: 'chevronBounce 1.8s ease-in-out infinite' }}
           >
-            <path d="M1 1L8 8L15 1" stroke="rgba(99,91,255,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M1 1L8 8L15 1" stroke="rgba(99,91,255,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
       </div>
@@ -1204,8 +1204,8 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
           >
             Start your audit
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12"/>
-              <polyline points="12 5 19 12 12 19"/>
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
             </svg>
           </button>
 
@@ -1215,8 +1215,8 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
             marginTop: '12px', justifyContent: 'center'
           }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              <polyline points="9 12 11 14 15 10"/>
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <polyline points="9 12 11 14 15 10" />
             </svg>
             <span style={{ font: '12px Inter', color: 'rgba(255,255,255,0.6)' }}>
               100% local · your LookML never leaves your machine

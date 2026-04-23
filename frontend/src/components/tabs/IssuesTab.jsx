@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { RULES } from '../../data/rules';
 
 const gridCols = '80px 130px 130px 1fr 150px 130px 45px';
 
@@ -82,10 +83,10 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
       }
     });
 
-    // Sort by issue count descending and take top 30
-    return Object.values(fileMap)
-      .sort((a,b) => b.count - a.count)
-      .slice(0, 30);
+      // Sort by issue count descending and take top 20
+      return Object.values(fileMap)
+        .sort((a,b) => b.count - a.count)
+        .slice(0, 20);
   }, [auditData]);
 
   const violationRules = useMemo(() => {
@@ -93,15 +94,26 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
     auditData.issues.forEach(issue => {
       const rule = issue.category || 'unknown';
       if (!ruleMap[rule]) {
-        ruleMap[rule] = { name: rule, count: 0, sev: issue.severity, desc: issue.message };
+        ruleMap[rule] = { 
+          name: rule, 
+          category: rule,
+          count: 0, 
+          sev: issue.severity, 
+          exampleMessage: issue.message 
+        };
       }
       ruleMap[rule].count++;
     });
     return Object.values(ruleMap)
       .sort((a,b) => b.count - a.count)
-      .slice(0, 6)
-      .map((r, i) => ({ ...r, rank: i + 1, time: '~5 min each' }));
+      .slice(0, 5)
+      .map((r, i) => ({ ...r, rank: i + 1, fixMinutes: 5 }));
   }, [auditData]);
+
+  const totalFixHours = useMemo(() => {
+    const totalMins = violationRules.reduce((sum, r) => sum + (r.count * r.fixMinutes), 0);
+    return (totalMins / 60).toFixed(1);
+  }, [violationRules]);
 
   const filteredIssues = useMemo(() => {
     let issues = auditData.issues ?? [];
@@ -168,6 +180,8 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const toggleGroup = (file) => setCollapsedGroups(prev => ({ ...prev, [file]: !prev[file] }));
 
+  const [expandedId, setExpandedId] = useState(null);
+
   const sortOrder = { error: 0, warning: 1, info: 2 };
 
   return (
@@ -202,90 +216,171 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
       )}
 
       {/* ── Section 1: Three Actionable Insight Cards ── */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
         
         {/* Card 1: Quick Wins */}
-        <div className="insight-card" style={{ flex: '1 1 300px', minWidth: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-            <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-2)', letterSpacing: '0.1em', fontWeight: 600 }}>Quick Wins</div>
-            <div style={{ color: 'var(--accent)', fontSize: '14px' }}>✦</div>
-          </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-2)', fontStyle: 'italic', marginBottom: '16px' }}>Fix in under 5 minutes — no logic changes needed</div>
-          
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '16px' }}>
-            <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '36px', fontWeight: 700, color: 'var(--accent)', lineHeight: 1 }}>{quickWins.total}</div>
-            <div style={{ fontSize: '14px', color: 'var(--text-2)' }}>fields missing metadata</div>
+        <div style={{
+          minHeight: '150px', background: '#FFFFFF', borderRadius: '12px', padding: '14px 18px',
+          border: '1px solid #E2DFF5', borderLeft: '4px solid #635BFF',
+          display: 'flex', flexDirection: 'column', transition: '150ms ease', position: 'relative'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#635BFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+            <span style={{ fontFamily: 'Sora, sans-serif', fontSize: '11px', fontWeight: 600, color: '#6B7280', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Quick Wins
+            </span>
+            <span style={{ marginLeft: 'auto', fontFamily: 'Inter, sans-serif', fontSize: '12px', color: '#9CA3AF' }}>
+              Fix in &lt; 5 min
+            </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
-            <div style={{ background: '#F5F3FF', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', color: 'var(--text-1)', width: 'max-content' }}>· No Label — {quickWins.noLabel} fields</div>
-            <div style={{ background: '#F5F3FF', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', color: 'var(--text-1)', width: 'max-content' }}>· No Description — {quickWins.noDesc} fields</div>
+          <div style={{ display: 'flex', alignItems: 'center', marginTop: '8px' }}>
+            <span style={{ fontFamily: 'Sora, sans-serif', fontSize: '40px', fontWeight: 700, color: '#635BFF', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+              {quickWins.total}
+            </span>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '15px', color: '#6B7280', marginLeft: '8px' }}>
+              metadata gaps
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '8px', marginBottom: '10px' }}>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: '#6B7280' }}>· {quickWins.noLabel} missing labels</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: '#6B7280' }}>· {quickWins.noDesc} missing descriptions</div>
           </div>
 
           <div style={{ marginTop: 'auto' }}>
-            <div style={{ width: '100%', height: '8px', borderRadius: '4px', background: 'var(--border)', overflow: 'hidden', marginBottom: '6px' }}>
-              <div style={{ height: '100%', width: `${quickWins.percentAffected}%`, background: 'var(--accent)' }} />
+            <div style={{ height: '4px', background: '#E2DFF5', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${quickWins.percentAffected}%`, background: '#635BFF', borderRadius: '2px' }} />
             </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-3)', marginBottom: '16px' }}>{quickWins.percentAffected}% of all dimensions affected</div>
-            <span style={{ display: 'inline-block', background: '#EEF2FF', color: 'var(--accent)', borderRadius: '20px', padding: '4px 14px', fontFamily: 'Sora, sans-serif', fontSize: '12px', fontWeight: 600 }}>{quickWins.total} quick fixes available →</span>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '12px', color: '#9CA3AF', marginTop: '8px', marginBottom: '16px' }}>
+              {quickWins.percentAffected}% of all dimensions affected
+            </div>
+            <button 
+              onClick={() => document.getElementById('issues-table')?.scrollIntoView({ behavior: 'smooth' })}
+              style={{
+              background: 'rgba(99,91,255,0.08)', color: '#635BFF', border: '1px solid rgba(99,91,255,0.2)',
+              borderRadius: '8px', padding: '8px 16px', fontFamily: 'Sora, sans-serif', fontSize: '13px', fontWeight: 600,
+              cursor: 'pointer', transition: '150ms ease'
+            }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,91,255,0.14)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(99,91,255,0.08)'}>
+              Show quick fixes available →
+            </button>
           </div>
         </div>
 
         {/* Card 2: Blast Radius */}
-        <div className="insight-card" style={{ flex: '1 1 300px', minWidth: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-            <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-2)', letterSpacing: '0.1em', fontWeight: 600 }}>Blast Radius</div>
-            <div style={{ color: 'var(--warning)', fontSize: '14px' }}>⚠️</div>
-          </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-2)', fontStyle: 'italic', marginBottom: '16px' }}>Explores broken or degraded by current issues</div>
-          
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '16px' }}>
-            <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '36px', fontWeight: 700, color: 'var(--error)', lineHeight: 1 }}>{blastRadius.count}</div>
-            <div style={{ fontSize: '14px', color: 'var(--text-2)' }}>explores at risk</div>
+        <div style={{
+          minHeight: '150px', background: '#FFFFFF', borderRadius: '12px', padding: '14px 18px',
+          border: '1px solid #E2DFF5', borderLeft: '4px solid #DC2626',
+          display: 'flex', flexDirection: 'column', transition: '150ms ease'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"/>
+            </svg>
+            <span style={{ fontFamily: 'Sora, sans-serif', fontSize: '11px', fontWeight: 600, color: '#6B7280', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Blast Radius
+            </span>
+            <span style={{ marginLeft: 'auto', fontFamily: 'Inter, sans-serif', fontSize: '12px', color: '#9CA3AF' }}>
+              Affected Explores
+            </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '24px' }}>
-            {blastRadius.explores.slice(0, 3).map((e, i) => (
-              <div key={e} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '32px', borderBottom: '1px solid var(--border)' }}>
-                <span style={{ fontFamily: "'Fira Code', monospace", fontSize: '13px', color: 'var(--text-1)' }}>· {e}</span>
-                <span style={{ background: i === 0 && blastRadius.hasCritical ? '#FEF2F2' : '#FFFBEB', color: i === 0 && blastRadius.hasCritical ? 'var(--error)' : 'var(--warning)', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, fontFamily: 'Sora, sans-serif' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginTop: '8px' }}>
+            <span style={{ fontFamily: 'Sora, sans-serif', fontSize: '40px', fontWeight: 700, color: '#DC2626', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+              {blastRadius.count}
+            </span>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '15px', color: '#6B7280', marginLeft: '8px' }}>
+              explores at risk
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', marginTop: '8px', marginBottom: '10px' }}>
+            {blastRadius.explores.slice(0, 2).map((e, i) => (
+              <div key={e} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid rgba(226,223,245,0.4)' }}>
+                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: '#1E1B4B', fontWeight: 500 }}>{e}</span>
+                <span style={{
+                  background: i === 0 && blastRadius.hasCritical ? '#FEF2F2' : '#FFFBEB',
+                  color: i === 0 && blastRadius.hasCritical ? '#DC2626' : '#D97706',
+                  border: `1px solid ${i === 0 && blastRadius.hasCritical ? '#FECACA' : '#FDE68A'}`,
+                  padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, fontFamily: 'Sora, sans-serif'
+                }}>
                   {i === 0 && blastRadius.hasCritical ? 'ERROR' : 'WARNING'}
                 </span>
               </div>
             ))}
           </div>
 
-          <div style={{ marginTop: 'auto', background: blastRadius.hasCritical ? '#FEF2F2' : '#F0FDF4', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', color: blastRadius.hasCritical ? 'var(--error)' : 'var(--success)' }}>
-            {blastRadius.hasCritical ? 'Critical references will cause explore load failure' : 'No critical references detected'}
+          <div style={{
+            marginTop: 'auto', background: '#FEF2F2', border: '1px solid #FECACA',
+            borderRadius: '8px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px'
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '12px', color: '#DC2626' }}>
+              {blastRadius.hasCritical ? 'Critical failures detected in explores' : 'Major degradation likely in core models'}
+            </span>
           </div>
         </div>
 
         {/* Card 3: Dead Code */}
-        <div className="insight-card" style={{ flex: '1 1 300px', minWidth: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-            <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-2)', letterSpacing: '0.1em', fontWeight: 600 }}>Dead Code</div>
-            <div style={{ color: 'var(--text-3)' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            </div>
-          </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-2)', fontStyle: 'italic', marginBottom: '16px' }}>Views defined but never referenced in any explore</div>
-          
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '16px' }}>
-            <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '36px', fontWeight: 700, color: 'var(--text-2)', lineHeight: 1 }}>{deadCode.count}</div>
-            <div style={{ fontSize: '14px', color: 'var(--text-2)' }}>views safe to delete</div>
+        <div style={{
+          minHeight: '150px', background: '#FFFFFF', borderRadius: '12px', padding: '14px 18px',
+          border: '1px solid #E2DFF5', borderLeft: '4px solid #09A55A',
+          display: 'flex', flexDirection: 'column', transition: '150ms ease'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#09A55A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/>
+            </svg>
+            <span style={{ fontFamily: 'Sora, sans-serif', fontSize: '11px', fontWeight: 600, color: '#6B7280', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Dead Code
+            </span>
+            <span style={{ marginLeft: 'auto', fontFamily: 'Inter, sans-serif', fontSize: '12px', color: '#9CA3AF' }}>
+              Safe Deletions
+            </span>
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '24px' }}>
-            {deadCode.views.slice(0, 5).map(v => (
-              <span key={v} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '6px', padding: '3px 10px', fontFamily: "'Fira Code', monospace", fontSize: '12px', color: 'var(--text-2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginTop: '8px' }}>
+            <span style={{ fontFamily: 'Sora, sans-serif', fontSize: '40px', fontWeight: 700, color: '#09A55A', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+              {deadCode.count}
+            </span>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '15px', color: '#6B7280', marginLeft: '8px' }}>
+              views to prune
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px', marginBottom: '10px' }}>
+            {deadCode.views.slice(0, 3).map(v => (
+              <span key={v} style={{
+                fontFamily: 'Inter, sans-serif', fontSize: '12px', background: '#F3F4F6',
+                border: '1px solid #E2DFF5', borderRadius: '6px', padding: '3px 8px', color: '#1E1B4B'
+              }}>
                 {v}
               </span>
             ))}
-            {deadCode.views.length > 5 && <span style={{ fontSize: '12px', color: 'var(--text-3)' }}>+{deadCode.views.length - 5} more</span>}
+            {deadCode.views.length > 3 && (
+              <span style={{
+                fontFamily: 'Inter, sans-serif', fontSize: '12px', background: 'rgba(99,91,255,0.08)',
+                color: '#635BFF', border: '1px solid rgba(99,91,255,0.2)', borderRadius: '6px', padding: '3px 8px'
+              }}>
+                +{deadCode.views.length - 3} more
+              </span>
+            )}
           </div>
 
-          <div style={{ marginTop: 'auto', background: '#F0FDF4', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', color: 'var(--success)' }}>
-            Removing dead code reduces parse time and confusion
+          <div style={{
+            marginTop: 'auto', background: '#F0FDF4', border: '1px solid #BBF7D0',
+            borderRadius: '8px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px'
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#09A55A" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '12px', color: '#09A55A' }}>
+              Removing these will reduce project parse time
+            </span>
           </div>
         </div>
       </div>
@@ -295,86 +390,43 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
         
         {/* Left: Issue Density Heatmap by View (60%) */}
         <div className="card" style={{ flex: '1 1 600px', padding: '24px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '16px' }}>
-            <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-2)' }}>Issue Density Heatmap by View</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>Click a file to filter the table below</div>
-          </div>
-          
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>0 issues</span>
-              <div style={{ width: '120px', height: '6px', borderRadius: '3px', background: 'linear-gradient(to right, #F0FDF4, #FEF9C3, #FED7AA, #FECACA, #FCA5A5)' }} />
-              <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>13+ issues</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+              <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-2)' }}>Top 20 Issue Density Views</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>Click a file to filter table</div>
             </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-2)' }}>
-              {cleanFilesCnt} files fully clean · {attentionFilesCnt} files need attention
+            <div style={{ fontSize: '11px', color: 'var(--text-2)', background: 'var(--bg)', padding: '3px 8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
+              {cleanFilesCnt} clean · {attentionFilesCnt} total files
             </div>
           </div>
           
-          <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px', alignContent: 'start' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '10px', color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Legend</span>
+              <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>0</span>
+              <div style={{ width: '120px', height: '4px', borderRadius: '2px', background: 'linear-gradient(to right, #F0FDF4, #FEF9C3, #FED7AA, #FECACA, #FCA5A5)' }} />
+              <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>13+ issues</span>
+            </div>
+          </div>
+          
+          <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '10px', alignContent: 'start', width: '100%', overflow: 'hidden' }}>
             {heatmapFiles.map(f => (
               <HeatmapCell 
                 key={f.name} 
                 file={f} 
                 selected={selectedFile === f.name}
-                onClick={() => {
-                  setSelectedFile(f.name);
-                }} 
+                onClick={() => setSelectedFile(f.name)} 
               />
             ))}
           </div>
         </div>
 
-        {/* Right: Rule Firing Frequency (40%) */}
-        <div className="card" style={{ flex: '1 1 400px', padding: '24px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '20px' }}>
-            <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-2)' }}>Top Violation Rules</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>Most frequently triggered across all files</div>
-          </div>
-          
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            {violationRules.map((rule, idx) => (
-              <div key={rule.name} className="rule-row" style={{ display: 'flex', gap: '8px', padding: '12px 0', borderBottom: idx < violationRules.length - 1 ? '1px solid var(--border)' : 'none', transition: 'all 120ms ease' }}>
-                <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '11px', color: 'var(--text-3)', width: '28px', flexShrink: 0, marginTop: '2px' }}>#{rule.rank}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '13px', fontWeight: 600, color: 'var(--text-1)' }}>{rule.name}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ 
-                        background: rule.sev === 'error' ? '#FEF2F2' : '#FFFBEB', 
-                        color: rule.sev === 'error' ? 'var(--error)' : 'var(--warning)', 
-                        padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, fontFamily: 'Sora, sans-serif' 
-                      }}>
-                        {rule.count}
-                      </span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-3)', fontStyle: 'italic', width: '70px', textAlign: 'right' }}>{rule.time}</span>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-2)', fontFamily: 'Inter, sans-serif', marginBottom: '8px' }}>
-                    {rule.desc}
-                  </div>
-                  <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'var(--border)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${(rule.count / maxRuleCount) * 100}%`, background: rule.sev === 'error' ? 'var(--error)' : 'var(--warning)', borderRadius: '3px' }} />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginTop: '16px', background: 'linear-gradient(135deg, #EEF2FF, #F5F3FF)', border: '1px solid rgba(99,91,255,0.15)', borderRadius: '8px', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-2)' }}>Estimated total fix time:</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>If fixed sequentially starting from #1</div>
-            </div>
-            <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '24px', fontWeight: 700, color: 'var(--accent)' }}>
-              ~4.5 hours
-            </div>
-          </div>
-        </div>
+        {/* Right: Top Violation Rules (40%) */}
+        <TopViolationRules rules={violationRules} totalFixHours={totalFixHours} />
       </div>
 
       {/* ── Section 3: Redesigned Table Grouped by File ── */}
-      <div>
+      <div id="issues-table">
         
         {/* Filter Toolbar */}
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px', flexWrap: 'wrap' }}>
@@ -490,11 +542,17 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
                       </div>
                     </div>
                     
-                    <div style={{ maxHeight: isCollapsed ? '0px' : '5000px', overflow: 'hidden', transition: 'max-height 250ms ease' }}>
-                      {sortedGroup.map((issue, idx) => (
-                        <IssueRow key={issue.id || `${filename}-${idx}`} issue={issue} isAlt={idx % 2 === 1} />
-                      ))}
-                    </div>
+                      <div style={{ maxHeight: isCollapsed ? '0px' : '5000px', overflow: 'hidden', transition: 'max-height 250ms ease' }}>
+                        {sortedGroup.map((issue, idx) => (
+                          <IssueRow 
+                            key={issue.id || `${filename}-${idx}`} 
+                            issue={issue} 
+                            isAlt={idx % 2 === 1}
+                            isExpanded={expandedId === (issue.id || `${filename}-${idx}`)}
+                            onToggle={() => setExpandedId(expandedId === (issue.id || `${filename}-${idx}`) ? null : (issue.id || `${filename}-${idx}`))}
+                          />
+                        ))}
+                      </div>
                   </div>
                 );
               })}
@@ -596,6 +654,121 @@ function HeatmapCell({ file, selected, onClick }) {
   );
 }
 
+function TopViolationRules({ rules, totalFixHours }) {
+  const maxCount = Math.max(...rules.map(r => r.count), 1);
+
+  return (
+    <div style={{
+      flex: '1 1 400px', background: '#FFFFFF', borderRadius: '12px', padding: '20px 24px',
+      border: '1px solid #E2DFF5', display: 'flex', flexDirection: 'column', minWidth: 0
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+        <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '11px', fontWeight: 600, color: '#6B7280', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Top Violation Rules
+        </div>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '12px', color: '#9CA3AF' }}>
+          Most frequently triggered
+        </div>
+      </div>
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0' }}>
+        {rules.map((rule, idx) => (
+          <React.Fragment key={rule.name}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontFamily: 'Sora, sans-serif', fontSize: '11px', color: '#9CA3AF', width: '20px', fontVariantNumeric: 'tabular-nums' }}>
+                  #{rule.rank}
+                </span>
+                <span style={{ fontFamily: 'Sora, sans-serif', fontSize: '14px', fontWeight: 600, color: '#1E1B4B' }}>
+                  {rule.name}
+                </span>
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'Sora, sans-serif', fontSize: '14px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: getRuleColor(rule.category) }}>
+                    {rule.count.toLocaleString()}
+                  </span>
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '11px', color: '#9CA3AF', marginLeft: '8px' }}>
+                    ~{rule.fixMinutes} min each
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '6px', marginLeft: '28px' }}>
+                <div style={{ height: '6px', background: '#F3F4F6', borderRadius: '3px', width: '100%', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', background: getRuleColor(rule.category), borderRadius: '3px',
+                    width: `${(rule.count / maxCount) * 100}%`, transition: 'width 400ms ease'
+                  }} />
+                </div>
+              </div>
+
+              <div style={{ marginTop: '4px', marginLeft: '28px', position: 'relative' }}>
+                <RuleDescription text={rule.exampleMessage} />
+              </div>
+            </div>
+            {idx < rules.length - 1 && (
+              <div style={{ borderBottom: '1px solid #F3F4F6', margin: '12px 0' }} />
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+
+      <div style={{ borderTop: '1px solid #E2DFF5', paddingTop: '16px', marginTop: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', fontWeight: 600, color: '#9CA3AF', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Estimated Total Fix Time
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '11px', color: '#9CA3AF', marginTop: '2px' }}>
+              If fixed sequentially starting from #1
+            </div>
+          </div>
+          <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '28px', fontWeight: 700, color: '#635BFF', fontVariantNumeric: 'tabular-nums' }}>
+            ~{totalFixHours} hours
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getRuleColor(cat) {
+  const c = cat?.toLowerCase();
+  if (c === 'field quality' || c === 'duplicate definition') return '#D97706';
+  if (c === 'broken reference' || c === 'join integrity') return '#DC2626';
+  if (c === 'orphan view') return '#2563EB';
+  return '#6B7280';
+}
+
+function RuleDescription({ text }) {
+  const [hovered, setHovered] = React.useState(false);
+
+  return (
+    <div 
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        fontFamily: 'Inter, sans-serif', fontSize: '12px', color: '#9CA3AF',
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        maxWidth: '100%', cursor: 'help'
+      }}
+    >
+      {text}
+      {hovered && (
+        <div style={{
+          position: 'absolute', bottom: '100%', left: '0', marginBottom: '8px',
+          background: '#1E1B4B', color: '#FFFFFF', padding: '8px 12px', borderRadius: '8px',
+          fontSize: '12px', fontFamily: 'Inter, sans-serif', maxWidth: '280px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 100,
+          animation: 'fadeSlideUp 150ms ease-out', pointerEvents: 'none',
+          whiteSpace: 'normal', wordBreak: 'break-word'
+        }}>
+          {text}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SevPill({ type, active, onClick }) {
   const isErr = type === 'error';
   const isWrn = type === 'warning';
@@ -619,15 +792,15 @@ function SevPill({ type, active, onClick }) {
   );
 }
 
-function IssueRow({ issue, isAlt }) {
-  const [expanded, setExpanded] = useState(false);
+function IssueRow({ issue, isAlt, isExpanded, onToggle }) {
   const [hovered, setHovered] = useState(false);
 
   const isErr = issue.severity === 'error';
   const isWrn = issue.severity === 'warning';
   
+  const sevColor = isErr ? '#DC2626' : isWrn ? '#D97706' : '#2563EB';
   const badgeBg  = isErr ? '#FEF2F2' : isWrn ? '#FFFBEB' : '#EFF6FF';
-  const badgeCol = isErr ? '#DC2626' : isWrn ? '#D97706' : '#2563EB';
+  const badgeCol = sevColor;
   const badgeBdr = isErr ? '#FECACA' : isWrn ? '#FDE68A' : '#BFDBFE';
 
   const objName = getObjectName(issue);
@@ -636,15 +809,16 @@ function IssueRow({ issue, isAlt }) {
   return (
     <>
       <div 
-        onClick={() => setExpanded(!expanded)}
+        onClick={onToggle}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{ 
           display: 'grid', gridTemplateColumns: gridCols, gap: '16px', 
           padding: '14px 20px', borderBottom: '1px solid var(--border)',
-          background: hovered ? '#FAFBFF' : isAlt ? 'rgba(99,91,255,0.01)' : 'transparent',
-          transition: 'background 120ms ease', cursor: 'pointer',
-          alignItems: 'start'
+          background: (isExpanded || hovered) ? '#F9F8FF' : isAlt ? 'rgba(99,91,255,0.01)' : 'transparent',
+          borderLeft: isExpanded ? `4px solid ${sevColor}` : '4px solid transparent',
+          transition: 'all 120ms ease', cursor: 'pointer',
+          alignItems: 'start', position: 'relative'
         }}
       >
         <div>
@@ -672,25 +846,171 @@ function IssueRow({ issue, isAlt }) {
         </div>
       </div>
       
-      {expanded && (
-        <div style={{ background: '#F8F7FF', borderBottom: '1px solid var(--border)', borderTop: '1px solid var(--border)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', animation: 'fadeSlideUp 200ms ease-out' }}>
-          <div style={{ fontSize: '14px', color: 'var(--text-1)', fontFamily: 'Inter, sans-serif', lineHeight: 1.6 }}>
-            <strong style={{ fontWeight: 600 }}>Message:</strong> {issue.message}
-          </div>
-          <div style={{ fontSize: '13px', color: 'var(--text-2)', fontFamily: 'Inter, sans-serif', fontStyle: 'italic', lineHeight: 1.5 }}>
-            <strong style={{ fontWeight: 600, fontStyle: 'normal' }}>Suggestion:</strong> {issue.suggestion || 'No suggestion available.'}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
-            <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontFamily: "'Fira Code', monospace", color: 'var(--text-1)', userSelect: 'all' }}>
-              {issue.source_file}{issue.line_number ? `:${issue.line_number}` : ''}
+      {isExpanded && (
+        <div style={{ 
+          background: '#F9F8FF', 
+          borderLeft: `3px solid ${sevColor}`,
+          borderBottom: '1px solid #E2DFF5',
+          borderRadius: '0 0 8px 8px',
+          padding: '16px 20px 20px 20px',
+          display: 'flex', gap: '32px', alignItems: 'flex-start',
+          animation: 'fadeSlideUp 150ms ease-out'
+        }}>
+          {/* Left Column: LookML Fix Preview */}
+          <div style={{ flex: 1, position: 'relative' }}>
+            <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', fontWeight: 600, color: '#9CA3AF', letterSpacing: '0.08em', marginBottom: '8px' }}>SUGGESTED FIX</div>
+            <div style={{ position: 'relative', background: '#0F0E1A', borderRadius: '8px', padding: '14px 16px', border: '1px solid #1E1B4B' }}>
+              <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 10 }}>
+                <CopyButton text={getRuleMeta(issue).goodExample || issue.suggestion || issue.message} ghost={true} />
+              </div>
+              <LookMLSnippet code={getRuleMeta(issue).goodExample || '# No specific fix snippet available\n# Please refer to suggestion column'} />
             </div>
-            <button style={{ background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '6px', padding: '8px 14px', fontSize: '12px', fontFamily: 'Sora, sans-serif', fontWeight: 600, cursor: 'pointer', transition: 'background 150ms ease' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--accent)'}>
-              Copy fix suggestion
-            </button>
+          </div>
+
+          {/* Right Column: Context Metadata */}
+          <div style={{ width: '340px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', fontWeight: 600, color: '#9CA3AF', letterSpacing: '0.08em', marginBottom: '6px' }}>FILE LOCATION</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ 
+                  display: 'inline-flex', alignItems: 'center', gap: '8px',
+                  background: '#F3F4F6', border: '1px solid #E2DFF5', borderRadius: '6px',
+                  padding: '6px 10px', fontFamily: 'Inter, sans-serif', fontSize: '12px', color: '#1E1B4B'
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span style={{ fontFamily: "'Fira Code', monospace" }}>{issue.source_file}</span>
+                </div>
+                {issue.line_number && (
+                  <div style={{
+                    background: 'rgba(99,91,255,0.08)', color: '#635BFF', border: '1px solid rgba(99,91,255,0.2)',
+                    borderRadius: '4px', padding: '2px 8px', fontFamily: 'Sora, sans-serif', fontSize: '11px', fontWeight: 600
+                  }}>
+                    Line {issue.line_number}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', fontWeight: 600, color: '#9CA3AF', letterSpacing: '0.08em', marginBottom: '6px' }}>RULE</div>
+              <div style={{ display: 'inline-flex', background: '#F3F4F6', border: '1px solid #E2DFF5', borderRadius: '6px', padding: '4px 10px', color: '#635BFF', fontFamily: "'Fira Code', monospace", fontSize: '12px', fontWeight: 600 }}>
+                {getRuleMeta(issue).id || 'unknown_rule'}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', fontWeight: 600, color: '#9CA3AF', letterSpacing: '0.08em', marginBottom: '4px' }}>IMPACT</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: isErr ? '#DC2626' : isWrn ? '#D97706' : '#2563EB', lineHeight: 1.5, fontWeight: 500 }}>
+                {getImpactText(issue)}
+              </div>
+            </div>
           </div>
         </div>
       )}
     </>
+  );
+}
+
+function getRuleMeta(issue) {
+  return RULES.find(r => r.category === issue.category && (issue.message.includes(r.title) || issue.rule_id === r.id)) || 
+         RULES.find(r => r.category === issue.category) || 
+         {};
+}
+
+function getImpactText(issue) {
+  if (issue.impact) return issue.impact;
+  const meta = getRuleMeta(issue);
+  if (meta.description) return meta.description;
+  return issue.severity === 'error' ? 'Critical: Will cause model validation failure.' : 'Warning: May lead to poor user experience or inconsistent results.';
+}
+
+function LookMLSnippet({ code }) {
+  const highlightCode = (str) => {
+    // Basic LookML highlighter
+    const tokens = [
+      { regex: /#.*/g, color: '#6B7280' }, // Comments
+      { regex: /\b(view|explore|join|dimension|measure|dimension_group|parameter|filter|primary_key|type|sql|sql_on|relationship|label|description|view_label|group_label)\b/g, color: '#635BFF' }, // Keywords
+      { regex: /"(?:[^"\\]|\\.)*"/g, color: '#09A55A' }, // Strings/Values
+      { regex: /\b(yes|no)\b/g, color: '#09A55A' }, // Boolean values
+      { regex: /\${[^}]+}/g, color: '#D97706' }, // References
+    ];
+
+    let parts = [{ text: str, color: '#D1D5DB' }];
+
+    tokens.forEach(({ regex, color }) => {
+      let newParts = [];
+      parts.forEach(part => {
+        if (part.color !== '#D1D5DB') {
+          newParts.push(part);
+          return;
+        }
+        let lastIndex = 0;
+        let match;
+        while ((match = regex.exec(part.text)) !== null) {
+          if (match.index > lastIndex) {
+            newParts.push({ text: part.text.slice(lastIndex, match.index), color: '#D1D5DB' });
+          }
+          newParts.push({ text: match[0], color: color });
+          lastIndex = regex.lastIndex;
+        }
+        if (lastIndex < part.text.length) {
+          newParts.push({ text: part.text.slice(lastIndex), color: '#D1D5DB' });
+        }
+      });
+      parts = newParts;
+    });
+
+    return parts.map((p, i) => <span key={i} style={{ color: p.color }}>{p.text}</span>);
+  };
+
+  return (
+    <pre style={{ 
+      margin: 0, padding: 0, fontFamily: "'Fira Code', monospace", fontSize: '12px', 
+      lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all' 
+    }}>
+      {highlightCode(code)}
+    </pre>
+  );
+}
+
+function CopyButton({ text, ghost }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <button 
+      onClick={handleCopy}
+      style={{
+        border: '1px solid #E2DFF5', 
+        background: ghost ? 'rgba(255,255,255,0.05)' : '#FFFFFF', 
+        color: copied ? '#09A55A' : ghost ? '#FFFFFF' : '#635BFF',
+        borderRadius: '8px', padding: ghost ? '4px 10px' : '7px 14px', 
+        fontFamily: 'Inter, sans-serif', fontSize: ghost ? '11px' : '13px', fontWeight: 500,
+        display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', transition: '150ms ease',
+        outline: 'none', backdropFilter: ghost ? 'blur(4px)' : 'none'
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = 'rgba(99,91,255,0.5)';
+        e.currentTarget.style.background = ghost ? 'rgba(255,255,255,0.1)' : '#FFFFFF';
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = '#E2DFF5';
+        e.currentTarget.style.background = ghost ? 'rgba(255,255,255,0.05)' : '#FFFFFF';
+      }}
+    >
+      {copied ? (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      ) : (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      )}
+      {copied ? 'Copied!' : 'Copy fix'}
+    </button>
   );
 }
 

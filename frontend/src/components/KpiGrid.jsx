@@ -68,9 +68,11 @@ export default function KpiGrid({ result, filters, onKpiClick }) {
   return (
     <div style={{ marginBottom: '32px' }}>
 
-      {/* ── Tier 1 — 2fr hero + 3 × 1fr ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '12px', marginBottom: '12px', width: '100%' }}>
-        <HeroCard health={health_score} miniScores={miniScores} animDelay={100} />
+      {/* ── Tier 1 — 5-column grid with 2-span hero ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '12px', width: '100%' }}>
+        <div style={{ gridColumn: 'span 2' }}>
+          <HeroCard health={health_score} miniScores={miniScores} animDelay={100} />
+        </div>
         <KpiCard label="Total Issues" value={fi.length}        valueColor="var(--text-1)"                                          dur={600} delay={160} animIdx={1} contextStr={`across ${fv.length} views`} onClick={() => onKpiClick?.('total')} />
         <KpiCard label="Errors"       value={errors.length}   valueColor={errors.length   > 0 ? 'var(--error)'   : 'var(--text-1)'} dur={600} delay={220} animIdx={2} contextStr={errors.length > 0 ? 'critical · fix required' : 'all clear'} onClick={() => onKpiClick?.('errors')} />
         <KpiCard label="Warnings"     value={warnings.length} valueColor={warnings.length > 0 ? 'var(--warning)' : 'var(--text-1)'} dur={600} delay={280} animIdx={3} contextStr={warnings.length > 0 ? 'needs review' : 'all clear'} onClick={() => onKpiClick?.('warnings')} />

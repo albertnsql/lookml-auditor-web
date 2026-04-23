@@ -1,14 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { RuleRow } from './RulesComponents';
 
-const rules = [
+// ── Rule Data ─────────────────────────────────────────────────
+const RULES = [
   {
     id: 'missing_label',
     title: 'Missing Field Label',
-    description: 'Dimension or measure has no label defined. Users will see the technical field name in the UI instead of a human-readable label.',
     severity: 'warning',
     category: 'Field Quality',
-    badExample: 'dimension: customer_id {\n  type: number\n  sql: ${TABLE}.id ;;\n}',
-    goodExample: 'dimension: customer_id {\n  type: number\n  label: "Customer ID"\n  sql: ${TABLE}.id ;;\n}',
+    description: 'Dimension or measure has no label defined. Users see the raw field name in the UI instead of a human-readable label.',
+    badExample: `dimension: customer_id {
+  type: number
+  sql: \${TABLE}.id ;;
+}`,
+    goodExample: `dimension: customer_id {
+  type: number
+  label: "Customer ID"
+  sql: \${TABLE}.id ;;
+}`,
   },
   {
     id: 'missing_description',
@@ -16,402 +25,362 @@ const rules = [
     severity: 'warning',
     category: 'Field Quality',
     description: 'Field has no description. Self-service users cannot understand what this field represents without tribal knowledge.',
-    badExample: 'measure: total_revenue {\n  type: sum\n  sql: ${TABLE}.revenue ;;\n}',
-    goodExample: 'measure: total_revenue {\n  type: sum\n  sql: ${TABLE}.revenue ;;\n  description: "Sum of all revenue"\n}',
+    badExample: `measure: total_revenue {
+  type: sum
+  sql: \${TABLE}.revenue ;;
+}`,
+    goodExample: `measure: total_revenue {
+  type: sum
+  label: "Total Revenue"
+  description: "Sum of all confirmed order revenue"
+  sql: \${TABLE}.revenue ;;
+}`,
   },
   {
     id: 'missing_primary_key',
     title: 'Missing Primary Key',
     severity: 'warning',
     category: 'Field Quality',
-    description: 'View has no dimension with primary_key: yes. Looker cannot perform fanout detection without a defined primary key.',
-    badExample: 'view: orders {\n  dimension: id {\n    type: number\n  }\n}',
-    goodExample: 'view: orders {\n  dimension: id {\n    type: number\n    primary_key: yes\n  }\n}',
+    description: 'View has no dimension with primary_key: yes. Looker cannot perform fanout detection without a declared primary key, which can silently inflate aggregated metrics.',
+    badExample: `view: orders {
+  dimension: id {
+    type: number
+    sql: \${TABLE}.id ;;
+  }
+}`,
+    goodExample: `view: orders {
+  dimension: id {
+    type: number
+    primary_key: yes
+    sql: \${TABLE}.id ;;
+  }
+}`,
   },
   {
     id: 'broken_view_reference',
     title: 'Broken View Reference',
     severity: 'error',
     category: 'Broken Reference',
-    description: 'An explore join references a view that does not exist in the project. This will cause the explore to fail to load.',
-    badExample: 'explore: orders {\n  join: missing_view {\n    type: left_outer\n  }\n}',
-    goodExample: 'explore: orders {\n  join: customers {\n    type: left_outer\n    sql_on: ${orders.customer_id} = ${customers.id} ;;\n  }\n}',
+    description: 'An explore join references a view name that does not exist anywhere in the project. This causes the explore to fail to load entirely.',
+    badExample: `explore: orders {
+  join: missing_view {
+    type: left_outer
+    relationship: many_to_one
+  }
+}`,
+    goodExample: `explore: orders {
+  join: customers {
+    type: left_outer
+    relationship: many_to_one
+    sql_on: \${orders.customer_id} = \${customers.id} ;;
+  }
+}`,
   },
   {
     id: 'duplicate_view_definition',
     title: 'Duplicate View Definition',
     severity: 'error',
     category: 'Duplicate Definition',
-    description: 'The same view name is defined in more than one file. Looker will throw an error and the project will fail to load.',
-    badExample: '# file1.view.lkml\nview: customers { ... }\n\n# file2.view.lkml\nview: customers { ... }',
-    goodExample: '# Only one definition\n# customers.view.lkml\nview: customers { ... }',
+    description: 'The same view name is defined in more than one .lkml file. Looker will throw a project-level error and none of your explores will load.',
+    badExample: `# file1.view.lkml
+view: customers { ... }
+
+# file2.view.lkml  ← CONFLICT
+view: customers { ... }`,
+    goodExample: `# customers.view.lkml  ← Single source of truth
+view: customers {
+  sql_table_name: public.customers ;;
+  # ... all fields
+}`,
   },
   {
     id: 'join_missing_sql_on',
     title: 'Join Missing sql_on',
     severity: 'error',
     category: 'Join Integrity',
-    description: 'A join in an explore has no sql_on or foreign_key defined. Looker will produce a cross join which can return millions of rows.',
-    badExample: 'join: orders {\n  type: left_outer\n  relationship: many_to_one\n  # missing sql_on!\n}',
-    goodExample: 'join: orders {\n  type: left_outer\n  relationship: many_to_one\n  sql_on: ${users.id} = ${orders.user_id} ;;\n}',
+    description: 'A join in an explore has no sql_on or foreign_key defined. Without a join condition, Looker produces a Cartesian product which can return billions of rows.',
+    badExample: `join: orders {
+  type: left_outer
+  relationship: many_to_one
+  # missing sql_on — this is a cross join!
+}`,
+    goodExample: `join: orders {
+  type: left_outer
+  relationship: many_to_one
+  sql_on: \${users.id} = \${orders.user_id} ;;
+}`,
   },
   {
     id: 'orphan_view',
     title: 'Orphaned View',
     severity: 'info',
     category: 'Field Quality',
-    description: 'View is defined but never joined into any explore. It adds parse overhead and confuses developers.',
-    badExample: '# never_used.view.lkml\nview: never_used {\n  sql_table_name: public.temp ;;\n}\n# Not referenced in any explore',
-    goodExample: '# Either delete it or add to an explore:\nexplore: main {\n  join: never_used {\n    ...\n  }\n}',
+    description: 'View is defined but never joined into any explore. It adds unnecessary parse overhead on every project load and is invisible to end users.',
+    badExample: `# never_used.view.lkml
+view: never_used {
+  sql_table_name: public.temp ;;
+  # ... 40 fields nobody can access
+}`,
+    goodExample: `# Option 1: Delete it entirely.
+# Option 2: Expose it through an explore:
+explore: main {
+  join: never_used {
+    relationship: many_to_one
+    sql_on: \${main.id} = \${never_used.id} ;;
+  }
+}`,
   },
   {
     id: 'fanout_risk',
     title: 'Potential Fanout Risk',
     severity: 'warning',
     category: 'Join Integrity',
-    description: 'Join uses many_to_many or is missing a relationship declaration. This can cause metric inflation.',
-    badExample: 'join: order_items {\n  type: left_outer\n  sql_on: ${orders.id} = ${order_items.order_id} ;;\n  # missing relationship!\n}',
-    goodExample: 'join: order_items {\n  type: left_outer\n  relationship: one_to_many\n  sql_on: ${orders.id} = ${order_items.order_id} ;;\n}',
+    description: 'Join is missing a relationship declaration. Without it, Looker cannot warn about fan-out and aggregated metrics may be silently inflated.',
+    badExample: `join: order_items {
+  type: left_outer
+  sql_on: \${orders.id} = \${order_items.order_id} ;;
+  # missing relationship: — revenue will be 3x inflated
+}`,
+    goodExample: `join: order_items {
+  type: left_outer
+  relationship: one_to_many
+  sql_on: \${orders.id} = \${order_items.order_id} ;;
+}`,
   },
 ];
 
-export default function RulesPage() {
-  const [search, setSearch] = useState('');
-  const [severityFilter, setSeverityFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [expandedRules, setExpandedRules] = useState(new Set());
+// ── Category Tag ─────────────────────────────────────────────
+function CategoryTag({ label, active, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: '6px 14px', borderRadius: '8px',
+      fontFamily: 'Sora, sans-serif', fontSize: '12px', fontWeight: 600,
+      border: '1px solid',
+      cursor: 'pointer', transition: 'all 150ms ease',
+      background: active ? '#635BFF' : 'transparent',
+      color: active ? '#fff' : '#64748B',
+      borderColor: active ? '#635BFF' : 'rgba(100,116,139,0.2)',
+      boxShadow: active ? '0 2px 12px rgba(99,91,255,0.35)' : 'none',
+    }}>
+      {label}
+    </button>
+  );
+}
 
-  const toggleRule = (id) => {
-    setExpandedRules(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const filteredRules = rules.filter(rule => {
-    const matchSearch = !search ||
-      rule.title.toLowerCase().includes(search.toLowerCase()) ||
-      rule.id.toLowerCase().includes(search.toLowerCase()) ||
-      rule.description.toLowerCase().includes(search.toLowerCase());
-    const matchSeverity = severityFilter === 'all' || rule.severity === severityFilter;
-    const matchCategory = categoryFilter === 'all' || rule.category === categoryFilter;
-    return matchSearch && matchSeverity && matchCategory;
-  });
-
+// ── Stat Card ────────────────────────────────────────────────
+function StatCard({ label, count, color, glow }) {
   return (
     <div style={{
-      background: '#ECEAF6',
-      minHeight: '100vh',
-      fontFamily: 'Inter, sans-serif',
-      position: 'relative',
-      overflow: 'hidden'
+      background: '#FFFFFF',
+      border: '1px solid rgba(0,0,0,0.06)',
+      borderRadius: '16px',
+      padding: '20px 28px',
+      display: 'flex', flexDirection: 'column', gap: '4px',
+      boxShadow: `0 4px 24px \${glow}`,
+      minWidth: '120px',
     }}>
-      {/* Same background blobs as landing page */}
-      <div style={{
-        position: 'fixed', top: '-100px', right: '-100px',
-        width: '500px', height: '500px',
-        background: 'radial-gradient(circle, rgba(99,91,255,0.08) 0%, transparent 70%)',
-        borderRadius: '50%', pointerEvents: 'none', zIndex: 0
-      }} />
-      <div style={{
-        position: 'fixed', bottom: '-80px', left: '-80px',
-        width: '400px', height: '400px',
-        background: 'radial-gradient(circle, rgba(139,92,246,0.06) 0%, transparent 70%)',
-        borderRadius: '50%', pointerEvents: 'none', zIndex: 0
-      }} />
+      <span style={{ fontFamily: 'Sora, sans-serif', fontSize: '36px', fontWeight: 800, color, lineHeight: 1 }}>
+        {count}
+      </span>
+      <span style={{ fontFamily: 'Sora, sans-serif', fontSize: '11px', fontWeight: 600, color: '#94A3B8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+        {label}
+      </span>
+    </div>
+  );
+}
 
-      <div style={{
-        maxWidth: '1200px', margin: '0 auto',
-        padding: '48px 48px', position: 'relative', zIndex: 1
-      }}>
-        {/* Back link */}
-        <div style={{ marginBottom: '32px' }}>
-          <a href="/" style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            font: '13px Sora', fontWeight: 600, color: '#635BFF',
-            textDecoration: 'none',
-            opacity: 0, animation: 'fadeInUp 0.4s ease-out 0.1s forwards'
-          }}>
-            ← Back to App
-          </a>
-        </div>
+// ── Main Page ────────────────────────────────────────────────
+export default function RulesPage() {
+  const [search, setSearch] = useState('');
+  const [sevFilter, setSevFilter] = useState('all');
 
-        {/* Page title */}
-        <div style={{ marginBottom: '48px', opacity: 0, animation: 'fadeInUp 0.5s ease-out 0.2s forwards' }}>
-          {/* Label */}
+  const filtered = useMemo(() => RULES.filter(r => {
+    const q = search.toLowerCase();
+    const matchSearch = !q ||
+      r.id.toLowerCase().includes(q) ||
+      r.description.toLowerCase().includes(q) ||
+      r.category.toLowerCase().includes(q);
+    const matchSev = sevFilter === 'all' || r.severity === sevFilter;
+    return matchSearch && matchSev;
+  }), [search, sevFilter]);
+
+  const counts = {
+    total:   RULES.length,
+    error:   RULES.filter(r => r.severity === 'error').length,
+    warning: RULES.filter(r => r.severity === 'warning').length,
+    info:    RULES.filter(r => r.severity === 'info').length,
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#ECEAF6', fontFamily: 'Inter, sans-serif' }}>
+
+      {/* ── Animated background ── */}
+      <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
+        <div style={{
+          position: 'absolute', top: '-200px', right: '-200px',
+          width: '700px', height: '700px', borderRadius: '50%',
+          background: 'radial-gradient(circle, #DDD9F0 0%, transparent 65%)',
+          opacity: 0.8
+        }} />
+        <div style={{
+          position: 'absolute', bottom: '-150px', left: '-150px',
+          width: '500px', height: '500px', borderRadius: '50%',
+          background: 'radial-gradient(circle, #D4CFE8 0%, transparent 65%)',
+          opacity: 0.6
+        }} />
+      </div>
+
+      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '56px 40px 80px', position: 'relative', zIndex: 1 }}>
+
+        {/* ── Back link ── */}
+        <a href="/" style={{
+          display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '48px',
+          fontFamily: 'Sora, sans-serif', fontSize: '13px', fontWeight: 600, color: '#635BFF',
+          textDecoration: 'none', opacity: 0, animation: 'ru_fade 0.4s ease 0.05s forwards'
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+          </svg>
+          Back to App
+        </a>
+
+        {/* ── Header ── */}
+        <div style={{ marginBottom: '48px', opacity: 0, animation: 'ru_fade 0.5s ease 0.1s forwards' }}>
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: '8px',
             background: 'rgba(99,91,255,0.1)', border: '1px solid rgba(99,91,255,0.2)',
-            borderRadius: '20px', padding: '4px 14px',
-            font: '11px Sora', fontWeight: 700, color: '#635BFF',
-            letterSpacing: '0.08em', marginBottom: '16px'
+            borderRadius: '20px', padding: '4px 14px', marginBottom: '20px',
+            fontFamily: 'Sora, sans-serif', fontSize: '11px', fontWeight: 700, color: '#635BFF', letterSpacing: '0.1em'
           }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#635BFF', boxShadow: '0 0 8px #635BFF' }} />
             AUDIT RULES
           </div>
-          
           <h1 style={{
-            font: '42px Sora', fontWeight: 800, color: '#1E1B4B',
-            letterSpacing: '-1px', marginBottom: '12px', lineHeight: 1.1
+            fontFamily: 'Sora, sans-serif', fontSize: '52px', fontWeight: 800,
+            color: '#0F0E1A', letterSpacing: '-2px', lineHeight: 1.05, marginBottom: '14px'
           }}>
-            Complete rule catalog.
+            Rule Catalog.
           </h1>
-          <p style={{ font: '16px Inter', color: '#6B7280', maxWidth: '480px', lineHeight: 1.6 }}>
-            Every check performed during a LookML audit — with examples and fix guidance.
+          <p style={{ fontSize: '16px', color: '#64748B', lineHeight: 1.65, maxWidth: '520px' }}>
+            Every check performed during a LookML audit — with severity, category, and real before/after code examples.
           </p>
         </div>
 
-        {/* Stats pills row */}
-        <div style={{
-          display: 'flex', gap: '12px', marginBottom: '32px', flexWrap: 'wrap',
-          opacity: 0, animation: 'fadeInUp 0.5s ease-out 0.3s forwards'
-        }}>
-          {[
-            { label: 'Total Rules', count: rules.length, bg: '#EEF2FF', color: '#635BFF', border: 'rgba(99,91,255,0.2)' },
-            { label: 'Errors',   count: rules.filter(r => r.severity === 'error').length,   bg: '#FEF2F2', color: '#DC2626', border: 'rgba(220,38,38,0.2)' },
-            { label: 'Warnings', count: rules.filter(r => r.severity === 'warning').length, bg: '#FFFBEB', color: '#D97706', border: 'rgba(217,119,6,0.2)' },
-            { label: 'Info',     count: rules.filter(r => r.severity === 'info').length,    bg: '#EFF6FF', color: '#2563EB', border: 'rgba(37,99,235,0.2)' },
-          ].map(({ label, count, bg, color, border }) => (
-            <div key={label} style={{
-              background: bg, border: `1px solid ${border}`,
-              borderRadius: '10px', padding: '10px 18px',
-              display: 'flex', flexDirection: 'column', gap: '2px'
-            }}>
-              <span style={{ font: '20px Sora', fontWeight: 800, color }}>{count}</span>
-              <span style={{ font: '11px Sora', fontWeight: 600, color, opacity: 0.7, letterSpacing: '0.06em' }}>
-                {label.toUpperCase()}
-              </span>
-            </div>
-          ))}
+        {/* ── Stat Cards ── */}
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '48px', flexWrap: 'wrap', opacity: 0, animation: 'ru_fade 0.5s ease 0.2s forwards' }}>
+          <StatCard label="Total Rules" count={counts.total}   color="#635BFF" glow="rgba(99,91,255,0.10)"  />
+          <StatCard label="Errors"      count={counts.error}   color="#EF4444" glow="rgba(239,68,68,0.08)"  />
+          <StatCard label="Warnings"    count={counts.warning} color="#F59E0B" glow="rgba(245,158,11,0.08)" />
+          <StatCard label="Info"        count={counts.info}    color="#3B82F6" glow="rgba(59,130,246,0.08)" />
         </div>
 
-        {/* Filter bar */}
+        {/* ── Command Bar ── */}
         <div style={{
-          background: '#FFFFFF', border: '1px solid #E2DFF5',
-          borderRadius: '12px', padding: '14px 20px',
-          display: 'flex', gap: '12px', alignItems: 'center',
-          marginBottom: '32px', flexWrap: 'wrap',
-          boxShadow: '0 2px 8px rgba(99,91,255,0.06)',
-          opacity: 0, animation: 'fadeInUp 0.5s ease-out 0.4s forwards'
+          display: 'flex', alignItems: 'center', gap: '12px',
+          background: 'rgba(255,255,255,0.85)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(99,91,255,0.15)',
+          borderRadius: '14px', padding: '12px 16px',
+          marginBottom: '24px',
+          boxShadow: '0 8px 32px rgba(99,91,255,0.08)',
+          opacity: 0, animation: 'ru_fade 0.5s ease 0.3s forwards',
+          flexWrap: 'wrap'
         }}>
           {/* Search */}
-          <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
-            <svg style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '200px', background: '#F8F7FF', borderRadius: '10px', padding: '10px 14px', border: '1px solid rgba(99,91,255,0.1)' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search rules..."
+              placeholder="Search rules by ID, name or description..."
               style={{
-                width: '100%', padding: '8px 12px 8px 32px',
-                background: '#F8F7FF', border: '1px solid #E2DFF5',
-                borderRadius: '8px', font: '13px Inter', color: '#1E1B4B',
-                outline: 'none', boxSizing: 'border-box',
-                transition: 'border-color 150ms, box-shadow 150ms'
-              }}
-              onFocus={e => {
-                e.target.style.borderColor = '#635BFF';
-                e.target.style.boxShadow = '0 0 0 3px rgba(99,91,255,0.1)';
-              }}
-              onBlur={e => {
-                e.target.style.borderColor = '#E2DFF5';
-                e.target.style.boxShadow = 'none';
+                background: 'none', border: 'none', outline: 'none', width: '100%',
+                fontFamily: 'Inter, sans-serif', fontSize: '14px', color: '#1E1B4B',
               }}
             />
+            {search && (
+              <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '16px', lineHeight: 1, padding: 0 }}>×</button>
+            )}
           </div>
 
-          {/* Severity filter pills */}
-          <div style={{ display: 'flex', gap: '6px' }}>
-            {['All', 'Error', 'Warning', 'Info'].map(s => (
-              <button key={s} onClick={() => setSeverityFilter(s.toLowerCase())}
-                style={{
-                  padding: '6px 14px', borderRadius: '20px',
-                  font: '12px Sora', fontWeight: 600, cursor: 'pointer',
-                  border: '1px solid',
-                  transition: 'all 150ms ease',
-                  ...(severityFilter === s.toLowerCase() ? {
-                    background: '#635BFF', color: 'white', borderColor: '#635BFF',
-                    boxShadow: '0 2px 8px rgba(99,91,255,0.3)'
-                  } : {
-                    background: 'transparent', color: '#6B7280', borderColor: '#E2DFF5'
-                  })
-                }}>
-                {s}
-              </button>
+          {/* Divider */}
+          <div style={{ width: '1px', height: '28px', background: 'rgba(0,0,0,0.08)', flexShrink: 0 }} />
+
+          {/* Severity Filter */}
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {['all', 'error', 'warning', 'info'].map(s => (
+              <CategoryTag key={s} label={s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)} active={sevFilter === s} onClick={() => setSevFilter(s)} />
             ))}
           </div>
 
-          {/* Category dropdown */}
-          <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
-            style={{
-              padding: '8px 14px', background: '#F8F7FF',
-              border: '1px solid #E2DFF5', borderRadius: '8px',
-              font: '13px Sora', color: '#1E1B4B', cursor: 'pointer',
-              outline: 'none'
-            }}>
-            <option value="all">All Categories</option>
-            <option value="Field Quality">Field Quality</option>
-            <option value="Broken Reference">Broken Reference</option>
-            <option value="Duplicate Definition">Duplicate Definition</option>
-            <option value="Join Integrity">Join Integrity</option>
-          </select>
-
-          {/* Results count */}
-          <span style={{ font: '12px Sora', color: '#9CA3AF', marginLeft: 'auto' }}>
-            {filteredRules.length} rules
-          </span>
+          {/* Count */}
+          <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+            <span style={{ fontFamily: 'Sora, sans-serif', fontSize: '12px', fontWeight: 600, color: '#94A3B8' }}>
+              {filtered.length} rule{filtered.length !== 1 ? 's' : ''}
+            </span>
+          </div>
         </div>
 
-        {/* Rule cards grid */}
+        {/* ── Rule List ── */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
-          gap: '20px'
+          background: '#FFFFFF',
+          borderRadius: '16px',
+          border: '1px solid rgba(0,0,0,0.06)',
+          overflow: 'hidden',
+          boxShadow: '0 4px 32px rgba(0,0,0,0.06)',
+          opacity: 0, animation: 'ru_fade 0.5s ease 0.4s forwards'
         }}>
-          {filteredRules.map((rule, idx) => {
-            const severityConfig = {
-              error:   { color: '#DC2626', bg: '#FEF2F2', border: '#FECACA', label: 'ERROR'   },
-              warning: { color: '#D97706', bg: '#FFFBEB', border: '#FDE68A', label: 'WARNING' },
-              info:    { color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE', label: 'INFO'    },
-            }[rule.severity];
+          {/* Table header */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '220px 110px 160px 1fr 120px',
+            borderBottom: '1px solid rgba(0,0,0,0.07)',
+            background: '#FAFAFA',
+            padding: '0',
+          }}>
+            {['Rule ID', 'Severity', 'Category', 'Description', ''].map((h, i) => (
+              <div key={i} style={{
+                padding: '12px 24px',
+                fontFamily: 'Sora, sans-serif', fontSize: '11px', fontWeight: 700,
+                color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em',
+                ...(i === 4 ? { textAlign: 'right' } : {})
+              }}>{h}</div>
+            ))}
+          </div>
 
-            const expanded = expandedRules.has(rule.id);
-
-            return (
-              <div key={rule.id}
-                style={{
-                  background: '#FFFFFF',
-                  border: '1px solid #E2DFF5',
-                  borderLeft: `4px solid ${severityConfig.color}`,
-                  borderRadius: '12px',
-                  overflow: 'hidden',
-                  boxShadow: '0 2px 8px rgba(99,91,255,0.06)',
-                  transition: 'all 200ms ease',
-                  opacity: 0,
-                  animation: `fadeInUp 0.5s ease-out ${0.1 + idx * 0.06}s forwards`,
-                  cursor: 'pointer'
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.transform = 'translateY(-3px)';
-                  e.currentTarget.style.boxShadow = '0 12px 32px rgba(99,91,255,0.12)';
-                  e.currentTarget.style.borderColor = 'rgba(99,91,255,0.3)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(99,91,255,0.06)';
-                  e.currentTarget.style.borderColor = '#E2DFF5';
-                }}
-              >
-                {/* Card content wrapper (to prevent click on expansion from triggering card hover/click logic if needed, 
-                    but here we just wrap the non-toggle part) */}
-                <div style={{ padding: '20px 20px 0 20px' }} onClick={() => toggleRule(rule.id)}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                    {/* Rule ID chip */}
-                    <code style={{
-                      font: '12px "Fira Code", monospace',
-                      color: '#635BFF', background: '#EEF2FF',
-                      border: '1px solid rgba(99,91,255,0.15)',
-                      padding: '3px 10px', borderRadius: '6px'
-                    }}>
-                      {rule.id}
-                    </code>
-                    {/* Severity badge */}
-                    <span style={{
-                      font: '10px Sora', fontWeight: 700,
-                      color: severityConfig.color,
-                      background: severityConfig.bg,
-                      border: `1px solid ${severityConfig.border}`,
-                      borderRadius: '20px', padding: '3px 10px',
-                      letterSpacing: '0.06em'
-                    }}>
-                      {severityConfig.label}
-                    </span>
-                  </div>
-
-                  {/* Title */}
-                  <h3 style={{ font: '16px Sora', fontWeight: 700, color: '#1E1B4B', marginBottom: '8px' }}>
-                    {rule.title}
-                  </h3>
-
-                  {/* Description */}
-                  <p style={{ font: '13px Inter', color: '#6B7280', lineHeight: 1.6, marginBottom: '14px' }}>
-                    {rule.description}
-                  </p>
-
-                  {/* Category tag */}
-                  <div style={{
-                    display: 'inline-block',
-                    font: '10px Sora', fontWeight: 700, letterSpacing: '0.08em',
-                    color: '#9CA3AF', marginBottom: '16px',
-                    textTransform: 'uppercase'
-                  }}>
-                    {rule.category}
-                  </div>
-                </div>
-
-                {/* Expand toggle */}
-                <div
-                  onClick={() => toggleRule(rule.id)}
-                  style={{
-                    padding: '12px 20px',
-                    borderTop: '1px solid #F0EEFF',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    cursor: 'pointer',
-                    background: expanded ? '#FAFBFF' : 'transparent',
-                    transition: 'background 150ms'
-                  }}
-                >
-                  <span style={{ font: '12px Sora', fontWeight: 600, color: '#635BFF' }}>
-                    {expanded ? 'Hide example' : 'View example →'}
-                  </span>
-                  <span style={{
-                    color: '#635BFF', fontSize: '14px', fontWeight: 700,
-                    transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                    transition: 'transform 200ms ease', display: 'inline-block'
-                  }}>
-                    ↓
-                  </span>
-                </div>
-
-                {/* Expandable example */}
-                <div style={{
-                  maxHeight: expanded ? '600px' : '0',
-                  overflow: 'hidden',
-                  transition: 'max-height 300ms ease-out'
-                }}>
-                  <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {/* Bad example */}
-                    <div style={{ background: '#FEF2F2', borderRadius: '8px', padding: '12px 14px', border: '1px solid #FECACA' }}>
-                      <div style={{ font: '10px Sora', fontWeight: 700, color: '#DC2626', letterSpacing: '0.08em', marginBottom: '8px' }}>
-                        ✗ BAD
-                      </div>
-                      <pre style={{ fontFamily: '"Fira Code", monospace', fontSize: '11px', color: '#374151', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-                        {rule.badExample}
-                      </pre>
-                    </div>
-                    {/* Good example */}
-                    <div style={{ background: '#F0FDF4', borderRadius: '8px', padding: '12px 14px', border: '1px solid #BBF7D0' }}>
-                      <div style={{ font: '10px Sora', fontWeight: 700, color: '#09A55A', letterSpacing: '0.08em', marginBottom: '8px' }}>
-                        ✓ GOOD
-                      </div>
-                      <pre style={{ fontFamily: '"Fira Code", monospace', fontSize: '11px', color: '#374151', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-                        {rule.goodExample}
-                      </pre>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {/* Rows */}
+          {filtered.length === 0 ? (
+            <div style={{ padding: '60px', textAlign: 'center' }}>
+              <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '15px', fontWeight: 600, color: '#94A3B8', marginBottom: '8px' }}>No rules match</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: '#CBD5E1' }}>Try a different search term or filter.</div>
+            </div>
+          ) : (
+            filtered.map((rule, idx) => (
+              <RuleRow key={rule.id} rule={rule} index={idx} />
+            ))
+          )}
         </div>
+
+        {/* ── Footer note ── */}
+        <p style={{ textAlign: 'center', fontFamily: 'Sora, sans-serif', fontSize: '12px', color: '#CBD5E1', marginTop: '32px', opacity: 0, animation: 'ru_fade 0.5s ease 0.6s forwards' }}>
+          Click any row to view code examples. All rules are enforced during every audit run.
+        </p>
       </div>
 
-      <style dangerouslySetInnerHTML={{__html: `
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(16px); }
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes ru_fade {
+          from { opacity: 0; transform: translateY(14px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        a { text-decoration: none; }
+        input::placeholder { color: #94A3B8; }
       `}} />
     </div>
   );

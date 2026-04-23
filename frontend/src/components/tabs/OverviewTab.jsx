@@ -35,8 +35,8 @@ export default function OverviewTab({ result }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', animation: 'fadeSlideUp 400ms ease-out 600ms both' }}>
 
-      {/* ── 3-col chart grid ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 2.2fr 1.8fr', gap: '20px', alignItems: 'stretch', width: '100%', minHeight: '420px' }}>
+      {/* ── 3-col chart grid (Equal distribution) ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', alignItems: 'stretch', width: '100%', minHeight: '420px' }}>
 
         {/* Col 1 — Project Health: Radial Score Card */}
         <div className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '100%' }}>

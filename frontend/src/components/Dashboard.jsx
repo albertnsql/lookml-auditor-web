@@ -3,6 +3,8 @@ import TopBar            from './TopBar';
 import KpiGrid           from './KpiGrid';
 import OverviewTab       from './tabs/OverviewTab';
 import IssuesTab         from './tabs/IssuesTab';
+import AuditRulesTab     from './tabs/AuditRulesTab';
+import { RULES }         from '../data/rules';
 import VisualizationsTab from './tabs/VisualizationsTab';
 import InventoryTab      from './tabs/InventoryTab';
 import FileViewerTab     from './tabs/FileViewerTab';
@@ -199,6 +201,7 @@ export default function Dashboard({ auditData, isLoading, onReset }) {
           )}
           {activeTab === 'visuals'    && <VisualizationsTab result={auditData} />}
           {activeTab === 'inventory'  && <InventoryTab      result={auditData} />}
+          {activeTab === 'rules'      && <AuditRulesTab     rules={RULES} />}
           {activeTab === 'fileviewer' && <FileViewerTab     result={auditData} />}
           {activeTab === 'settings'   && <SettingsTab       result={auditData} onReset={onReset} />}
         </div>
