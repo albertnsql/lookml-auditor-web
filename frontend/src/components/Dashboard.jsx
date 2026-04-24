@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import TopBar            from './TopBar';
 import KpiGrid           from './KpiGrid';
 import OverviewTab       from './tabs/OverviewTab';
@@ -21,6 +21,11 @@ const NAV_ITEMS = [
 
 export default function Dashboard({ auditData, isLoading, onReset }) {
   const [activeTab, setActiveTab] = useState('overview');
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeTab]);
+
   const [issueFilters, setIssueFilters] = useState({
     severity: ['error', 'warning', 'info'],
     category: 'all',
