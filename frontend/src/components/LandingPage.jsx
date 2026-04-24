@@ -240,7 +240,7 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
         </div>
         <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
           <a href="/rules" style={{ font: '14px Sora', fontWeight: 600, color: '#1E1B4B', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={e => e.target.style.color = '#635BFF'} onMouseLeave={e => e.target.style.color = '#1E1B4B'}>Rules</a>
-          <a href="https://github.com/albertnsql/lookml-auditor" target="_blank" rel="noreferrer" style={{ font: '14px Sora', fontWeight: 600, color: '#1E1B4B', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={e => e.target.style.color = '#635BFF'} onMouseLeave={e => e.target.style.color = '#1E1B4B'}>GitHub</a>
+          <a href="https://github.com/albertnsql/lookml-auditor-web" target="_blank" rel="noreferrer" style={{ font: '14px Sora', fontWeight: 600, color: '#1E1B4B', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={e => e.target.style.color = '#635BFF'} onMouseLeave={e => e.target.style.color = '#1E1B4B'}>GitHub</a>
         </div>
       </nav>
 
@@ -1242,7 +1242,7 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
         </div>
         <div style={{ display: 'flex', gap: '24px' }}>
           <a href="/rules" style={{ font: '13px Sora', color: 'rgba(255,255,255,0.6)', textDecoration: 'none' }}>Rules Reference</a>
-          <a href="https://github.com/albertnsql/lookml-auditor"
+          <a href="https://github.com/albertnsql/lookml-auditor-web"
             style={{ font: '13px Sora', color: 'rgba(255,255,255,0.6)', textDecoration: 'none' }}
             target="_blank" rel="noreferrer">
             GitHub →
