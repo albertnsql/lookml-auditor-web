@@ -84,7 +84,7 @@ body {
 }
 .sidebar-body { flex: 1; overflow-y: auto; padding: 4px 0; }
 
-.main-content { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; position: relative; }
+.main-content { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; position: relative; min-width: 0; }
 
 /* ─── TopBar ─────────────────────────────────────── */
 .topbar {
@@ -93,6 +93,7 @@ body {
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; padding: 0 32px; gap: 12px;
   position: sticky; top: 0; z-index: 50;
+  min-width: 0;
 }
 .topbar-title {
   font-family: 'Sora', sans-serif;
@@ -112,6 +113,7 @@ body {
   box-sizing: border-box;
   position: relative;
   z-index: 1;
+  min-width: 0;
 }
 
 /* ─── Cards ──────────────────────────────────────── */
@@ -256,7 +258,7 @@ body {
 @keyframes fadeInTooltip { to { opacity: 1; } }
 
 /* ─── Tables ─────────────────────────────────────── */
-.table-wrap { background: var(--surface); border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-card); border: 1px solid var(--border); }
+.table-wrap { background: var(--surface); border-radius: var(--radius-md); overflow-x: auto; box-shadow: var(--shadow-card); border: 1px solid var(--border); width: 100%; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .data-table th {
   background: var(--surface-2); padding: 10px 16px; text-align: left;

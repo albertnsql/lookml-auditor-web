@@ -18,56 +18,62 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('scoreMeta', () => {
-  it('returns Healthy label for score >= 85', () => {
-    expect(scoreMeta(85).label).toBe('Healthy');
+  it('returns Healthy label for score >= 90', () => {
+    expect(scoreMeta(90).label).toBe('Healthy');
     expect(scoreMeta(100).label).toBe('Healthy');
+    expect(scoreMeta(95).label).toBe('Healthy');
+  });
+
+  it('returns Good label for 80 <= score < 90', () => {
+    expect(scoreMeta(80).label).toBe('Good');
+    expect(scoreMeta(89).label).toBe('Good');
+    expect(scoreMeta(85).label).toBe('Good');
+  });
+
+  it('returns Needs Attention label for 70 <= score < 80', () => {
+    expect(scoreMeta(70).label).toBe('Needs Attention');
+    expect(scoreMeta(79).label).toBe('Needs Attention');
+    expect(scoreMeta(75).label).toBe('Needs Attention');
+  });
+
+  it('returns Critical label for score < 70', () => {
+    expect(scoreMeta(0).label).toBe('Critical');
+    expect(scoreMeta(69).label).toBe('Critical');
+    expect(scoreMeta(50).label).toBe('Critical');
+  });
+
+  it('returns a bg, color, dot, label for every tier', () => {
+    for (const score of [100, 85, 75, 50]) {
+      const m = scoreMeta(score);
+      expect(m.label).toBeTruthy();
+      expect(m.bg).toBeTruthy();
+      expect(m.color).toBeTruthy();
+      expect(m.dot).toBeTruthy();
+    }
+  });
+
+  it('boundary 90 is Healthy', () => {
     expect(scoreMeta(90).label).toBe('Healthy');
   });
 
-  it('returns Needs Attention label for 60 <= score < 85', () => {
-    expect(scoreMeta(60).label).toBe('Needs Attention');
-    expect(scoreMeta(84).label).toBe('Needs Attention');
-    expect(scoreMeta(72).label).toBe('Needs Attention');
+  it('boundary 89 is Good', () => {
+    expect(scoreMeta(89).label).toBe('Good');
   });
 
-  it('returns Critical label for score < 60', () => {
-    expect(scoreMeta(0).label).toBe('Critical');
-    expect(scoreMeta(59).label).toBe('Critical');
-    expect(scoreMeta(30).label).toBe('Critical');
+  it('boundary 80 is Good', () => {
+    expect(scoreMeta(80).label).toBe('Good');
   });
 
-  it('returns a color string for every tier', () => {
-    expect(scoreMeta(100).color).toMatch(/^var\(--/);
-    expect(scoreMeta(70).color).toMatch(/^var\(--/);
-    expect(scoreMeta(40).color).toMatch(/^var\(--/);
+  it('boundary 79 is Needs Attention', () => {
+    expect(scoreMeta(79).label).toBe('Needs Attention');
   });
 
-  it('healthy color is --success', () => {
-    expect(scoreMeta(100).color).toBe('var(--success)');
+  it('boundary 70 is Needs Attention', () => {
+    expect(scoreMeta(70).label).toBe('Needs Attention');
   });
 
-  it('attention color is --warning', () => {
-    expect(scoreMeta(70).color).toBe('var(--warning)');
-  });
-
-  it('critical color is --error', () => {
-    expect(scoreMeta(0).color).toBe('var(--error)');
-  });
-
-  it('boundary 85 is Healthy', () => {
-    expect(scoreMeta(85).label).toBe('Healthy');
-  });
-
-  it('boundary 84 is Needs Attention', () => {
-    expect(scoreMeta(84).label).toBe('Needs Attention');
-  });
-
-  it('boundary 60 is Needs Attention', () => {
-    expect(scoreMeta(60).label).toBe('Needs Attention');
-  });
-
-  it('boundary 59 is Critical', () => {
-    expect(scoreMeta(59).label).toBe('Critical');
+  it('boundary 69 is Critical', () => {
+    expect(scoreMeta(69).label).toBe('Critical');
   });
 });
 

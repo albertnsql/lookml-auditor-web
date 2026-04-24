@@ -1,539 +1,615 @@
 """
-test_parser.py — Unit tests for lookml_parser (parser + models).
+test_parser.py — Full test suite for the LookML parser.
 
 Covers:
-  - parse_file() on raw LookML strings written to temp files
-  - parse_project() on temp directories
-  - LookMLView / LookMLField / LookMLExplore / LookMLJoin model properties
-  - parse_manifest() and resolve_constants()
-  - Edge cases: empty files, tiny files (<10 bytes), missing project path,
-    files with only comments, nested derived tables, extends
+  - parse_project: normal, empty dir, tiny files, hidden dirs, multi-file
+  - parse_file: views, explores, derived tables, extends, fields
+  - parse_manifest: constant resolution, missing manifest
+  - Edge cases: empty files, comments, non-lkml files, unicode
+  - BUG REGRESSION: parse_project must preserve ALL views (not deduplicate by name)
 """
 from __future__ import annotations
+
 import os
 import sys
+import shutil
 import tempfile
 import textwrap
 from pathlib import Path
 
 import pytest
 
-# Ensure core/ is importable (conftest.py handles sys.path but be explicit here)
 _BACKEND_DIR = Path(__file__).parent.parent
 _CORE_DIR    = _BACKEND_DIR / "core"
+sys.path.insert(0, str(_BACKEND_DIR))
 sys.path.insert(0, str(_CORE_DIR))
 
-from lookml_parser.parser import parse_file, parse_project, parse_manifest, resolve_constants
-from lookml_parser.models import LookMLProject, LookMLView, LookMLField
+from lookml_parser.parser import (
+    parse_project, parse_file, parse_manifest, resolve_constants,
+)
+from lookml_parser.models import LookMLProject, LookMLView, LookMLExplore
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _write_tmp(content: str, suffix=".lkml") -> str:
-    """Write content to a named temp file and return its path."""
-    fd, path = tempfile.mkstemp(suffix=suffix)
-    os.close(fd)
-    Path(path).write_text(textwrap.dedent(content), encoding="utf-8")
-    return path
-
-
-def _tmp_project(*files: tuple[str, str]) -> str:
-    """
-    Create a temp directory with the given (filename, content) pairs.
-    Returns the directory path.  Caller is responsible for cleanup.
-    """
-    tmpdir = tempfile.mkdtemp(prefix="lkml_parser_test_")
-    for fname, content in files:
-        p = Path(tmpdir) / fname
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(textwrap.dedent(content), encoding="utf-8")
-    return tmpdir
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# parse_file — basic view parsing
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestParseFileViews:
-
-    def test_single_view_returned(self):
-        path = _write_tmp("""
-            view: orders {
-              sql_table_name: "public.orders" ;;
-              dimension: id { type: number sql: ${TABLE}.id ;; primary_key: yes }
-            }
-        """)
-        views, explores = parse_file(path)
-        assert len(views) == 1
-        assert views[0].name == "orders"
-        os.remove(path)
-
-    def test_view_sql_table_name_parsed(self):
-        path = _write_tmp("""
-            view: customers { sql_table_name: "analytics.customers" ;; }
-        """)
-        views, _ = parse_file(path)
-        assert views[0].sql_table_name == "analytics.customers"
-        os.remove(path)
-
-    def test_multiple_views_in_one_file(self):
-        path = _write_tmp("""
-            view: orders { sql_table_name: "public.orders" ;; }
-            view: customers { sql_table_name: "public.customers" ;; }
-        """)
-        views, _ = parse_file(path)
-        names = {v.name for v in views}
-        assert "orders" in names
-        assert "customers" in names
-        os.remove(path)
-
-    def test_primary_key_flag_parsed(self):
-        path = _write_tmp("""
-            view: orders {
-              dimension: id { type: number sql: ${TABLE}.id ;; primary_key: yes }
-            }
-        """)
-        views, _ = parse_file(path)
-        pk_fields = [f for f in views[0].fields if f.primary_key]
-        assert len(pk_fields) == 1
-        assert pk_fields[0].name == "id"
-        os.remove(path)
-
-    def test_hidden_field_parsed(self):
-        path = _write_tmp("""
-            view: orders {
-              dimension: internal { sql: ${TABLE}.x ;; hidden: yes }
-            }
-        """)
-        views, _ = parse_file(path)
-        hidden_fields = [f for f in views[0].fields if f.hidden]
-        assert any(f.name == "internal" for f in hidden_fields)
-        os.remove(path)
-
-    def test_label_and_description_parsed(self):
-        path = _write_tmp("""
-            view: orders {
-              dimension: id {
-                sql: ${TABLE}.id ;;
-                label: "Order ID"
-                description: "Unique order identifier"
-              }
-            }
-        """)
-        views, _ = parse_file(path)
-        field = views[0].fields[0]
-        assert field.label == "Order ID"
-        assert field.description == "Unique order identifier"
-        os.remove(path)
-
-    def test_dimension_group_parsed_as_field(self):
-        path = _write_tmp("""
-            view: orders {
-              dimension_group: created {
-                type: time
-                timeframes: [date, week, month]
-                sql: ${TABLE}.created_at ;;
-              }
-            }
-        """)
-        views, _ = parse_file(path)
-        assert any(f.field_type == "dimension_group" for f in views[0].fields)
-
-    def test_measure_field_type(self):
-        path = _write_tmp("""
-            view: orders {
-              measure: count { type: count }
-            }
-        """)
-        views, _ = parse_file(path)
-        assert any(f.field_type == "measure" for f in views[0].fields)
-        os.remove(path)
-
-    def test_tags_parsed(self):
-        path = _write_tmp("""
-            view: orders {
-              dimension: id {
-                sql: ${TABLE}.id ;;
-                tags: ["key", "pii"]
-              }
-            }
-        """)
-        views, _ = parse_file(path)
-        assert views[0].fields[0].tags == ["key", "pii"]
-        os.remove(path)
-
-    def test_derived_table_detected(self):
-        path = _write_tmp("""
-            view: order_summary {
-              derived_table: {
-                sql: SELECT customer_id, COUNT(*) FROM orders GROUP BY 1 ;;
-              }
-            }
-        """)
-        views, _ = parse_file(path)
-        assert views[0].is_derived_table is True
-        assert views[0].derived_table_sql is not None
-        os.remove(path)
-
-    def test_extends_parsed(self):
-        path = _write_tmp("""
-            view: orders_extended {
-              extends: [orders]
-              dimension: extra { sql: ${TABLE}.extra ;; }
-            }
-        """)
-        views, _ = parse_file(path)
-        assert "orders" in views[0].extends
-
-    def test_comments_stripped_before_parse(self):
-        path = _write_tmp("""
-            # This is a comment
-            view: orders {
-              # Another comment
-              sql_table_name: "public.orders" ;;
-            }
-        """)
-        views, _ = parse_file(path)
-        assert len(views) == 1
-        assert views[0].name == "orders"
-        os.remove(path)
-
-    def test_empty_file_returns_empty(self):
-        path = _write_tmp("")
-        views, explores = parse_file(path)
-        assert views == []
-        assert explores == []
-        os.remove(path)
-
-    def test_nonexistent_file_returns_empty(self):
-        views, explores = parse_file("/tmp/does_not_exist_xyz.lkml")
-        assert views == []
-        assert explores == []
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# parse_file — explore parsing
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestParseFileExplores:
-
-    def test_explore_name_parsed(self):
-        path = _write_tmp("""
-            explore: orders {
-              label: "Orders"
-              description: "Core orders explore"
-            }
-        """)
-        _, explores = parse_file(path)
-        assert len(explores) == 1
-        assert explores[0].name == "orders"
-        os.remove(path)
-
-    def test_explore_label_and_description(self):
-        path = _write_tmp("""
-            explore: orders {
-              label: "My Orders"
-              description: "All order data"
-            }
-        """)
-        _, explores = parse_file(path)
-        e = explores[0]
-        assert e.label == "My Orders"
-        assert e.description == "All order data"
-        os.remove(path)
-
-    def test_explore_with_from(self):
-        path = _write_tmp("""
-            explore: order_funnel { from: orders }
-        """)
-        _, explores = parse_file(path)
-        assert explores[0].from_view == "orders"
-        assert explores[0].base_view == "orders"
-        os.remove(path)
-
-    def test_explore_base_view_defaults_to_name(self):
-        path = _write_tmp("explore: orders {}")
-        _, explores = parse_file(path)
-        assert explores[0].base_view == "orders"
-        os.remove(path)
-
-    def test_join_name_parsed(self):
-        path = _write_tmp("""
-            explore: orders {
-              join: customers {
-                type: left_outer
-                sql_on: ${orders.customer_id} = ${customers.id} ;;
-                relationship: many_to_one
-              }
-            }
-        """)
-        _, explores = parse_file(path)
-        assert len(explores[0].joins) == 1
-        assert explores[0].joins[0].name == "customers"
-        os.remove(path)
-
-    def test_join_sql_on_parsed(self):
-        path = _write_tmp("""
-            explore: orders {
-              join: customers {
-                sql_on: ${orders.customer_id} = ${customers.id} ;;
-                relationship: many_to_one
-              }
-            }
-        """)
-        _, explores = parse_file(path)
-        join = explores[0].joins[0]
-        assert join.sql_on is not None
-        assert "customer_id" in join.sql_on
-        os.remove(path)
-
-    def test_join_relationship_parsed(self):
-        path = _write_tmp("""
-            explore: orders {
-              join: customers {
-                sql_on: ${orders.customer_id} = ${customers.id} ;;
-                relationship: many_to_one
-              }
-            }
-        """)
-        _, explores = parse_file(path)
-        assert explores[0].joins[0].relationship == "many_to_one"
-        os.remove(path)
-
-    def test_join_from_view_parsed(self):
-        path = _write_tmp("""
-            explore: orders {
-              join: cust_alias {
-                from: customers
-                sql_on: ${orders.customer_id} = ${cust_alias.id} ;;
-                relationship: many_to_one
-              }
-            }
-        """)
-        _, explores = parse_file(path)
-        j = explores[0].joins[0]
-        assert j.name == "cust_alias"
-        assert j.from_view == "customers"
-        assert j.resolved_view == "customers"   # uses from_view over name
-        os.remove(path)
-
-    def test_join_resolved_view_defaults_to_name(self):
-        path = _write_tmp("""
-            explore: orders {
-              join: customers {
-                sql_on: ${orders.customer_id} = ${customers.id} ;;
-                relationship: many_to_one
-              }
-            }
-        """)
-        _, explores = parse_file(path)
-        j = explores[0].joins[0]
-        assert j.resolved_view == "customers"
-        os.remove(path)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# parse_project
-# ─────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# parse_project — disk-based tests
+# ═══════════════════════════════════════════════════════════════════════════
 
 class TestParseProject:
 
-    def test_nonexistent_path_raises(self):
-        with pytest.raises(FileNotFoundError):
-            parse_project("/tmp/completely_missing_project_12345")
+    def test_minimal_project_returns_project_instance(self, minimal_project_dir):
+        project = parse_project(minimal_project_dir)
+        assert isinstance(project, LookMLProject)
 
-    def test_empty_dir_returns_empty_project(self):
-        tmpdir = tempfile.mkdtemp()
-        project = parse_project(tmpdir)
+    def test_minimal_project_name_is_dirname(self, minimal_project_dir):
+        project = parse_project(minimal_project_dir)
+        assert project.name == Path(minimal_project_dir).name
+
+    def test_minimal_project_parses_views(self, minimal_project_dir):
+        project = parse_project(minimal_project_dir)
+        names = [v.name for v in project.views]
+        assert "orders" in names
+
+    def test_minimal_project_parses_explores(self, minimal_project_dir):
+        project = parse_project(minimal_project_dir)
+        names = [e.name for e in project.explores]
+        assert "orders" in names
+
+    def test_empty_directory_returns_empty_project(self, empty_project_dir):
+        project = parse_project(empty_project_dir)
         assert project.views == []
         assert project.explores == []
-        import shutil; shutil.rmtree(tmpdir)
 
-    def test_project_name_is_directory_basename(self):
-        tmpdir = _tmp_project(("orders.view.lkml", "view: orders {}"))
-        project = parse_project(tmpdir)
-        assert project.name == Path(tmpdir).name
-        import shutil; shutil.rmtree(tmpdir)
-
-    def test_recursive_scan_finds_nested_files(self):
-        tmpdir = _tmp_project(
-            ("views/orders.view.lkml",   "view: orders { sql_table_name: \"pub.orders\" ;; }"),
-            ("views/sub/items.view.lkml", "view: items { sql_table_name: \"pub.items\" ;; }"),
-        )
-        project = parse_project(tmpdir)
-        names = {v.name for v in project.views}
-        assert "orders" in names
-        assert "items" in names
-        import shutil; shutil.rmtree(tmpdir)
-
-    def test_tiny_files_skipped(self):
-        """Files <10 bytes are skipped per parser spec."""
-        tmpdir = _tmp_project(("tiny.lkml", "view: x"))   # 7 bytes — skipped
-        project = parse_project(tmpdir)
+    def test_tiny_files_are_skipped(self, tiny_file_project_dir):
+        """Files < 10 bytes must be silently skipped."""
+        project = parse_project(tiny_file_project_dir)
         assert project.views == []
-        import shutil; shutil.rmtree(tmpdir)
 
-    def test_view_map_property(self):
-        tmpdir = _tmp_project(
-            ("orders.view.lkml", "view: orders { sql_table_name: \"pub.orders\" ;; }"),
-        )
-        project = parse_project(tmpdir)
-        assert "orders" in project.view_map
-        import shutil; shutil.rmtree(tmpdir)
+    def test_nonexistent_path_raises(self):
+        with pytest.raises(FileNotFoundError):
+            parse_project("/no/such/path/xyz_12345")
 
-    def test_explore_map_property(self):
-        tmpdir = _tmp_project(
-            ("core.explore.lkml", "explore: orders {}"),
-        )
-        project = parse_project(tmpdir)
-        assert "orders" in project.explore_map
-        import shutil; shutil.rmtree(tmpdir)
-
-    def test_derived_table_views_property(self):
-        tmpdir = _tmp_project(
-            ("summary.view.lkml",
-             "view: summary { derived_table: { sql: SELECT 1 ;; } }"),
-            ("orders.view.lkml",
-             "view: orders { sql_table_name: \"pub.orders\" ;; }"),
-        )
-        project = parse_project(tmpdir)
-        dt_names = {v.name for v in project.derived_table_views}
-        assert "summary" in dt_names
-        assert "orders" not in dt_names
-        import shutil; shutil.rmtree(tmpdir)
-
-    def test_all_files_property_collects_source_files(self):
-        tmpdir = _tmp_project(
-            ("orders.view.lkml", "view: orders { sql_table_name: \"pub.orders\" ;; }"),
-            ("core.explore.lkml", "explore: orders {}"),
-        )
-        project = parse_project(tmpdir)
-        assert len(project.all_files) > 0
-        import shutil; shutil.rmtree(tmpdir)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# LookMLView model properties
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestViewModelProperties:
-
-    def _make_view(self, fields):
-        return LookMLView(name="test", sql_table_name="pub.test", fields=fields)
-
-    def _fld(self, name, ft, pk=False):
-        return LookMLField(name=name, field_type=ft, sql="${TABLE}.x", primary_key=pk)
-
-    def test_dimensions_property(self):
-        v = self._make_view([
-            self._fld("d1", "dimension"),
-            self._fld("dg", "dimension_group"),
-            self._fld("m1", "measure"),
-        ])
-        dims = v.dimensions
-        assert len(dims) == 2
-        assert all(f.field_type in ("dimension", "dimension_group") for f in dims)
-
-    def test_measures_property(self):
-        v = self._make_view([
-            self._fld("d1", "dimension"),
-            self._fld("m1", "measure"),
-            self._fld("m2", "measure"),
-        ])
-        assert len(v.measures) == 2
-
-    def test_field_names_property(self):
-        v = self._make_view([self._fld("id", "dimension"), self._fld("count", "measure")])
-        assert v.field_names == {"id", "count"}
-
-    def test_has_primary_key_true(self):
-        v = self._make_view([self._fld("id", "dimension", pk=True)])
-        assert v.has_primary_key is True
-
-    def test_has_primary_key_false(self):
-        v = self._make_view([self._fld("id", "dimension", pk=False)])
-        assert v.has_primary_key is False
-
-    def test_primary_key_field_returns_correct_field(self):
-        v = self._make_view([
-            self._fld("name", "dimension"),
-            self._fld("id", "dimension", pk=True),
-        ])
-        pk = v.primary_key_field
-        assert pk is not None
-        assert pk.name == "id"
-
-    def test_is_derived_table_true(self):
-        v = LookMLView(name="dt", derived_table_sql="SELECT 1")
-        assert v.is_derived_table is True
-
-    def test_is_derived_table_false(self):
-        v = LookMLView(name="t", sql_table_name="pub.t")
-        assert v.is_derived_table is False
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# parse_manifest + resolve_constants
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestManifestAndConstants:
-
-    def test_resolve_constants_no_refs(self):
-        result = resolve_constants("schema.table", {"MY_SCHEMA": "prod"})
-        assert result == "schema.table"
-
-    def test_resolve_constants_replaces_ref(self):
-        result = resolve_constants("@{MY_SCHEMA}.orders", {"MY_SCHEMA": "prod"})
-        assert result == "prod.orders"
-
-    def test_resolve_constants_unknown_key_preserved(self):
-        result = resolve_constants("@{UNKNOWN}.orders", {"MY_SCHEMA": "prod"})
-        assert result == "@{UNKNOWN}.orders"
-
-    def test_resolve_constants_no_constants_dict(self):
-        result = resolve_constants("schema.table", {})
-        assert result == "schema.table"
-
-    def test_parse_manifest_missing_file_returns_empty(self):
+    def test_non_lkml_files_ignored(self):
         tmpdir = tempfile.mkdtemp()
-        constants = parse_manifest(tmpdir)
-        assert constants == {}
-        import shutil; shutil.rmtree(tmpdir)
+        try:
+            (Path(tmpdir) / "readme.md").write_text("# not lkml", encoding="utf-8")
+            (Path(tmpdir) / "config.yaml").write_text("key: value", encoding="utf-8")
+            project = parse_project(tmpdir)
+            assert project.views == []
+            assert project.explores == []
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
-    def test_parse_manifest_reads_constant(self):
+    def test_hidden_dirs_skipped(self):
+        """Files inside .hidden directories must be ignored."""
         tmpdir = tempfile.mkdtemp()
-        manifest = textwrap.dedent("""
-            constant: MY_SCHEMA {
-              value: "production"
+        try:
+            hidden = Path(tmpdir) / ".hidden_dir"
+            hidden.mkdir()
+            (hidden / "orders.view.lkml").write_text(
+                'view: orders { sql_table_name: "public.orders" ;; }',
+                encoding="utf-8"
+            )
+            project = parse_project(tmpdir)
+            assert project.views == []
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_recursive_subdirectories_parsed(self):
+        """Views in nested subdirectories must be discovered."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            sub = Path(tmpdir) / "views" / "core"
+            sub.mkdir(parents=True)
+            (sub / "orders.view.lkml").write_text(textwrap.dedent("""\
+                view: orders {
+                  sql_table_name: "public.orders" ;;
+                  dimension: id { type: number sql: ${TABLE}.id ;; primary_key: yes label: "ID" description: "ID" }
+                }
+            """), encoding="utf-8")
+            project = parse_project(tmpdir)
+            assert any(v.name == "orders" for v in project.views)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    # ── REGRESSION: the dict-dedup bug ─────────────────────────────────────
+
+    def test_duplicate_view_names_both_preserved(self, dup_views_disk_project_dir):
+        """
+        REGRESSION TEST: parse_project previously used a dict keyed on view.name,
+        meaning the second definition silently overwrote the first.
+        Now both must be in project.views so check_duplicates can detect them.
+        """
+        project = parse_project(dup_views_disk_project_dir)
+        orders_views = [v for v in project.views if v.name == "orders"]
+        assert len(orders_views) == 2, (
+            "Both 'orders' definitions must be in project.views "
+            "(was: dict-dedup bug silently dropped one)"
+        )
+
+    def test_multiple_explores_across_files_all_preserved(self):
+        """Explores from different files must all be collected."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            (Path(tmpdir) / "orders.view.lkml").write_text(
+                'view: orders { sql_table_name: "public.orders" ;;\n'
+                '  dimension: id { type: number sql: ${TABLE}.id ;; primary_key: yes label: "ID" description: "ID" }\n}',
+                encoding="utf-8",
+            )
+            (Path(tmpdir) / "a.explore.lkml").write_text(
+                "explore: alpha { }\n", encoding="utf-8"
+            )
+            (Path(tmpdir) / "b.explore.lkml").write_text(
+                "explore: beta { }\n", encoding="utf-8"
+            )
+            project = parse_project(tmpdir)
+            names = {e.name for e in project.explores}
+            assert "alpha" in names
+            assert "beta" in names
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_manifest_constants_resolved(self, manifest_project_dir):
+        project = parse_project(manifest_project_dir)
+        manifest_view = next((v for v in project.views if v.name == "manifest_view"), None)
+        assert manifest_view is not None
+        assert manifest_view.sql_table_name is not None
+        assert "@{" not in manifest_view.sql_table_name
+        assert "production" in manifest_view.sql_table_name
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# parse_file — unit tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestParseFile:
+
+    def _write(self, content: str) -> str:
+        fd, path = tempfile.mkstemp(suffix=".view.lkml")
+        os.close(fd)
+        Path(path).write_text(textwrap.dedent(content), encoding="utf-8")
+        return path
+
+    def test_returns_empty_for_nonexistent_file(self):
+        views, explores = parse_file("/no/such/file.lkml")
+        assert views == []
+        assert explores == []
+
+    def test_returns_empty_for_empty_file(self):
+        fd, path = tempfile.mkstemp(suffix=".lkml")
+        os.close(fd)
+        try:
+            views, explores = parse_file(path)
+            assert views == []
+            assert explores == []
+        finally:
+            os.unlink(path)
+
+    def test_parses_simple_view(self):
+        path = self._write("""\
+            view: orders {
+              sql_table_name: "public.orders" ;;
+              dimension: id {
+                type: number
+                sql: ${TABLE}.id ;;
+                primary_key: yes
+                label: "Order ID"
+                description: "Unique ID"
+              }
             }
         """)
-        (Path(tmpdir) / "manifest.lkml").write_text(manifest, encoding="utf-8")
-        constants = parse_manifest(tmpdir)
-        assert constants.get("MY_SCHEMA") == "production"
-        import shutil; shutil.rmtree(tmpdir)
+        try:
+            views, explores = parse_file(path)
+            assert len(views) == 1
+            assert views[0].name == "orders"
+            assert views[0].sql_table_name is not None
+        finally:
+            os.unlink(path)
 
-    def test_parse_project_resolves_constants_in_sql_table(self):
+    def test_parses_multiple_views_in_one_file(self):
+        path = self._write("""\
+            view: orders {
+              sql_table_name: "public.orders" ;;
+              dimension: id { type: number sql: ${TABLE}.id ;; primary_key: yes label: "ID" description: "ID" }
+            }
+            view: customers {
+              sql_table_name: "public.customers" ;;
+              dimension: id { type: number sql: ${TABLE}.id ;; primary_key: yes label: "ID" description: "ID" }
+            }
+        """)
+        try:
+            views, _ = parse_file(path)
+            names = {v.name for v in views}
+            assert "orders" in names
+            assert "customers" in names
+        finally:
+            os.unlink(path)
+
+    def test_parses_explore(self):
+        fd, path = tempfile.mkstemp(suffix=".explore.lkml")
+        os.close(fd)
+        Path(path).write_text("explore: orders {\n  label: \"Orders\"\n}\n", encoding="utf-8")
+        try:
+            _, explores = parse_file(path)
+            assert len(explores) == 1
+            assert explores[0].name == "orders"
+        finally:
+            os.unlink(path)
+
+    def test_parses_explore_with_join(self):
+        fd, path = tempfile.mkstemp(suffix=".explore.lkml")
+        os.close(fd)
+        Path(path).write_text(textwrap.dedent("""\
+            explore: orders {
+              join: customers {
+                type: left_outer
+                relationship: many_to_one
+                sql_on: ${orders.customer_id} = ${customers.id} ;;
+              }
+            }
+        """), encoding="utf-8")
+        try:
+            _, explores = parse_file(path)
+            assert len(explores) == 1
+            assert len(explores[0].joins) == 1
+            assert explores[0].joins[0].name == "customers"
+        finally:
+            os.unlink(path)
+
+    def test_parses_derived_table(self):
+        path = self._write("""\
+            view: dt_orders {
+              derived_table: {
+                sql: SELECT id FROM public.orders ;;
+              }
+              dimension: id {
+                type: number
+                sql: ${TABLE}.id ;;
+                primary_key: yes
+                label: "ID"
+                description: "Derived table ID"
+              }
+            }
+        """)
+        try:
+            views, _ = parse_file(path)
+            assert len(views) == 1
+            v = views[0]
+            assert v.is_derived_table
+            assert v.derived_table_sql is not None
+        finally:
+            os.unlink(path)
+
+    def test_parses_extends(self):
+        path = self._write("""\
+            view: child_view {
+              extends: [base_view]
+              dimension: id {
+                type: number
+                sql: ${TABLE}.id ;;
+                primary_key: yes
+                label: "ID"
+                description: "ID"
+              }
+            }
+        """)
+        try:
+            views, _ = parse_file(path)
+            assert len(views) == 1
+            assert "base_view" in views[0].extends
+        finally:
+            os.unlink(path)
+
+    def test_parses_primary_key_flag(self):
+        path = self._write("""\
+            view: orders {
+              sql_table_name: "public.orders" ;;
+              dimension: id {
+                type: number
+                sql: ${TABLE}.id ;;
+                primary_key: yes
+                label: "ID"
+                description: "ID"
+              }
+            }
+        """)
+        try:
+            views, _ = parse_file(path)
+            pk_field = next((f for f in views[0].fields if f.primary_key), None)
+            assert pk_field is not None
+            assert pk_field.name == "id"
+        finally:
+            os.unlink(path)
+
+    def test_parses_hidden_field(self):
+        path = self._write("""\
+            view: orders {
+              sql_table_name: "public.orders" ;;
+              dimension: id {
+                type: number
+                sql: ${TABLE}.id ;;
+                primary_key: yes
+                label: "ID"
+                description: "ID"
+              }
+              dimension: internal_id {
+                type: number
+                sql: ${TABLE}.internal_id ;;
+                hidden: yes
+                label: "Internal"
+                description: "Internal only"
+              }
+            }
+        """)
+        try:
+            views, _ = parse_file(path)
+            hidden = next((f for f in views[0].fields if f.name == "internal_id"), None)
+            assert hidden is not None
+            assert hidden.hidden is True
+        finally:
+            os.unlink(path)
+
+    def test_comments_stripped_before_parsing(self):
+        path = self._write("""\
+            # This is a comment
+            view: orders {
+              # sql_table_name: "this.should.be.ignored" ;;
+              sql_table_name: "public.orders" ;;
+              dimension: id {
+                type: number
+                sql: ${TABLE}.id ;; # inline comment
+                primary_key: yes
+                label: "ID"
+                description: "ID"
+              }
+            }
+        """)
+        try:
+            views, _ = parse_file(path)
+            assert len(views) == 1
+            assert views[0].sql_table_name == "public.orders"
+        finally:
+            os.unlink(path)
+
+    def test_parses_measure_field(self):
+        path = self._write("""\
+            view: orders {
+              sql_table_name: "public.orders" ;;
+              dimension: id { type: number sql: ${TABLE}.id ;; primary_key: yes label: "ID" description: "ID" }
+              measure: count {
+                type: count
+                label: "Count"
+                description: "Count of orders"
+              }
+            }
+        """)
+        try:
+            views, _ = parse_file(path)
+            measures = [f for f in views[0].fields if f.field_type == "measure"]
+            assert len(measures) == 1
+            assert measures[0].name == "count"
+        finally:
+            os.unlink(path)
+
+    def test_parses_dimension_group(self):
+        path = self._write("""\
+            view: orders {
+              sql_table_name: "public.orders" ;;
+              dimension: id { type: number sql: ${TABLE}.id ;; primary_key: yes label: "ID" description: "ID" }
+              dimension_group: created {
+                type: time
+                sql: ${TABLE}.created_at ;;
+                label: "Created"
+                description: "Creation timestamp"
+              }
+            }
+        """)
+        try:
+            views, _ = parse_file(path)
+            dgs = [f for f in views[0].fields if f.field_type == "dimension_group"]
+            assert len(dgs) == 1
+            assert dgs[0].name == "created"
+        finally:
+            os.unlink(path)
+
+    def test_unicode_content_handled(self):
+        path = self._write("""\
+            view: orders {
+              sql_table_name: "public.orders" ;;
+              dimension: id {
+                type: number
+                sql: ${TABLE}.id ;;
+                primary_key: yes
+                label: "ID — Identifiant"
+                description: "Champs clé primaire — données sensibles"
+              }
+            }
+        """)
+        try:
+            views, _ = parse_file(path)
+            assert len(views) == 1
+            assert views[0].name == "orders"
+        finally:
+            os.unlink(path)
+
+    def test_view_with_no_fields(self):
+        path = self._write("""\
+            view: empty_view {
+              sql_table_name: "public.empty" ;;
+            }
+        """)
+        try:
+            views, _ = parse_file(path)
+            assert len(views) == 1
+            assert views[0].fields == []
+        finally:
+            os.unlink(path)
+
+    def test_source_file_recorded_correctly(self):
+        path = self._write("""\
+            view: orders {
+              sql_table_name: "public.orders" ;;
+              dimension: id { type: number sql: ${TABLE}.id ;; primary_key: yes label: "ID" description: "ID" }
+            }
+        """)
+        try:
+            views, _ = parse_file(path)
+            assert views[0].source_file == path
+        finally:
+            os.unlink(path)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# parse_manifest + resolve_constants
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestParseManifest:
+
+    def test_missing_manifest_returns_empty(self):
         tmpdir = tempfile.mkdtemp()
-        (Path(tmpdir) / "manifest.lkml").write_text(
-            textwrap.dedent("""
+        try:
+            constants = parse_manifest(tmpdir)
+            assert constants == {}
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_parses_constant_from_manifest(self):
+        tmpdir = tempfile.mkdtemp()
+        try:
+            (Path(tmpdir) / "manifest.lkml").write_text(textwrap.dedent("""\
+                constant: MY_SCHEMA {
+                  value: "production"
+                }
+            """), encoding="utf-8")
+            constants = parse_manifest(tmpdir)
+            assert constants.get("MY_SCHEMA") == "production"
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_parses_multiple_constants(self):
+        tmpdir = tempfile.mkdtemp()
+        try:
+            (Path(tmpdir) / "manifest.lkml").write_text(textwrap.dedent("""\
                 constant: SCHEMA {
                   value: "prod"
                 }
-            """),
-            encoding="utf-8"
-        )
-        (Path(tmpdir) / "orders.view.lkml").write_text(
-            textwrap.dedent("""
-                view: orders {
-                  sql_table_name: "@{SCHEMA}.orders" ;;
+                constant: DB {
+                  value: "analytics"
                 }
-            """),
-            encoding="utf-8"
-        )
-        project = parse_project(tmpdir)
-        orders_view = project.view_map.get("orders")
-        assert orders_view is not None
-        assert orders_view.sql_table_name == "prod.orders"
-        import shutil; shutil.rmtree(tmpdir)
+            """), encoding="utf-8")
+            constants = parse_manifest(tmpdir)
+            assert constants.get("SCHEMA") == "prod"
+            assert constants.get("DB") == "analytics"
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_resolve_constants_replaces_reference(self):
+        sql = "@{MY_SCHEMA}.orders"
+        result = resolve_constants(sql, {"MY_SCHEMA": "production"})
+        assert result == "production.orders"
+
+    def test_resolve_constants_noop_when_no_at(self):
+        sql = "public.orders"
+        result = resolve_constants(sql, {"MY_SCHEMA": "production"})
+        assert result == "public.orders"
+
+    def test_resolve_constants_noop_when_empty_constants(self):
+        sql = "@{MY_SCHEMA}.orders"
+        result = resolve_constants(sql, {})
+        assert result == sql
+
+    def test_resolve_constants_leaves_unknown_refs(self):
+        sql = "@{UNKNOWN}.orders"
+        result = resolve_constants(sql, {"MY_SCHEMA": "production"})
+        assert result == "@{UNKNOWN}.orders"
+
+    def test_resolve_constants_multiple_refs(self):
+        sql = "@{DB}.@{SCHEMA}.orders"
+        result = resolve_constants(sql, {"DB": "analytics", "SCHEMA": "prod"})
+        assert result == "analytics.prod.orders"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Model property tests (LookMLView / LookMLExplore)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestModelProperties:
+
+    def test_view_is_derived_table_when_sql_set(self, make_view):
+        v = make_view("dt_view", derived_sql="SELECT 1", sql_table=None)
+        assert v.is_derived_table is True
+
+    def test_view_not_derived_table_when_sql_table(self, make_view):
+        v = make_view("normal_view", sql_table="public.orders")
+        assert v.is_derived_table is False
+
+    def test_view_has_primary_key(self, make_view, make_field):
+        v = make_view("orders", fields=[make_field("id", primary_key=True)])
+        assert v.has_primary_key is True
+
+    def test_view_no_primary_key(self, make_view, make_field):
+        v = make_view("orders", fields=[make_field("status")])
+        assert v.has_primary_key is False
+
+    def test_view_primary_key_field_returns_correct_field(self, make_view, make_field):
+        pk = make_field("id", primary_key=True)
+        v = make_view("orders", fields=[pk, make_field("status")])
+        assert v.primary_key_field == pk
+
+    def test_view_dimensions_property(self, make_view, make_field):
+        v = make_view("orders", fields=[
+            make_field("id", field_type="dimension"),
+            make_field("count", field_type="measure"),
+            make_field("created", field_type="dimension_group"),
+        ])
+        dim_names = {f.name for f in v.dimensions}
+        assert "id" in dim_names
+        assert "created" in dim_names
+        assert "count" not in dim_names
+
+    def test_view_measures_property(self, make_view, make_field):
+        v = make_view("orders", fields=[
+            make_field("id", field_type="dimension"),
+            make_field("count", field_type="measure"),
+        ])
+        assert len(v.measures) == 1
+        assert v.measures[0].name == "count"
+
+    def test_explore_base_view_defaults_to_name(self, make_explore):
+        e = make_explore("orders")
+        assert e.base_view == "orders"
+
+    def test_explore_base_view_uses_from(self, make_explore):
+        e = make_explore("alias", from_view="actual_view")
+        assert e.base_view == "actual_view"
+
+    def test_explore_base_view_uses_view_name(self, make_explore):
+        e = make_explore("alias", view_name="real_view")
+        assert e.base_view == "real_view"
+
+    def test_join_resolved_view_uses_from(self, make_join):
+        j = make_join("j", from_view="actual_view")
+        assert j.resolved_view == "actual_view"
+
+    def test_join_resolved_view_defaults_to_name(self, make_join):
+        j = make_join("orders")
+        assert j.resolved_view == "orders"
+
+    def test_project_view_map(self, make_view, make_project):
+        v = make_view("orders")
+        p = make_project(views=[v])
+        assert "orders" in p.view_map
+
+    def test_project_derived_table_views(self, make_view, make_project):
+        dt = make_view("dt", derived_sql="SELECT 1", sql_table=None)
+        normal = make_view("normal")
+        p = make_project(views=[dt, normal])
+        assert len(p.derived_table_views) == 1
+        assert p.derived_table_views[0].name == "dt"
+
+    def test_project_all_files(self, make_view, make_explore, make_project):
+        v = make_view("orders", source_file="orders.view.lkml")
+        e = make_explore("orders", source_file="core.explore.lkml")
+        p = make_project(views=[v], explores=[e])
+        files = p.all_files
+        assert "orders.view.lkml" in files
+        assert "core.explore.lkml" in files

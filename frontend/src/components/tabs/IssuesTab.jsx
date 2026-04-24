@@ -216,7 +216,7 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
       )}
 
       {/* ── Section 1: Three Actionable Insight Cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
         
         {/* Card 1: Quick Wins */}
         <div style={{
@@ -502,11 +502,11 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
         </div>
 
         {/* Card Table */}
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: '16px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', padding: '10px 20px', fontSize: '11px', fontFamily: 'Sora, sans-serif', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-2)', fontWeight: 600 }}>
-            <div>Severity</div><div>Category</div><div>Object</div><div>Message</div><div>Suggestion</div><div>File</div><div>Line</div>
-          </div>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', overflowX: 'auto' }}>
+          <div style={{ minWidth: '850px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: '16px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', padding: '10px 20px', fontSize: '11px', fontFamily: 'Sora, sans-serif', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-2)', fontWeight: 600 }}>
+              <div>Severity</div><div>Category</div><div>Object</div><div>Message</div><div>Suggestion</div><div>File</div><div>Line</div>
+            </div>
 
           {filteredIssues.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-3)', fontSize: '14px', fontFamily: 'Sora, sans-serif' }}>
@@ -558,6 +558,7 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
               })}
             </div>
           )}
+          </div>
         </div>
       </div>
 

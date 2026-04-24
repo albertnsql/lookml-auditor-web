@@ -23,28 +23,28 @@ from .models import (
 # Pre-compiled module-level patterns  (compiled ONCE, reused always)
 # ---------------------------------------------------------------------------
 _RE_COMMENT       = re.compile(r'#[^\n]*')
-_RE_VIEW_BLOCK    = re.compile(r'(?:\s|^)view\s*:\s*(\S+)\s*\{',     re.MULTILINE)
-_RE_EXPLORE_BLOCK = re.compile(r'(?:\s|^)explore\s*:\s*(\S+)\s*\{',  re.MULTILINE)
-_RE_ANON_DT       = re.compile(r'(?:\s|^)derived_table\s*:\s*\{',  re.MULTILINE)
+_RE_VIEW_BLOCK    = re.compile(r'^\s*view\s*:\s*(\S+)\s*\{',    re.MULTILINE)
+_RE_EXPLORE_BLOCK = re.compile(r'^\s*explore\s*:\s*(\S+)\s*\{', re.MULTILINE)
+_RE_ANON_DT       = re.compile(r'^\s*derived_table\s*:\s*\{',  re.MULTILINE)
 _RE_EXTENDS       = re.compile(r'extends\s*:\s*\[([^\]]+)\]')
 
 _FIELD_TYPE_PATTERNS = {
-    ft: re.compile(rf'(?:\s|^){ft}\s*:\s*(\S+)\s*\{{', re.MULTILINE)
+    ft: re.compile(rf'^\s*{ft}\s*:\s*(\S+)\s*\{{', re.MULTILINE)
     for ft in ("dimension_group", "dimension", "measure", "filter", "parameter")
 }
-_JOIN_BLOCK_RE  = re.compile(r'(?:\s|^)join\s*:\s*(\S+)\s*\{',  re.MULTILINE)
+_JOIN_BLOCK_RE  = re.compile(r'^\s*join\s*:\s*(\S+)\s*\{',  re.MULTILINE)
 
 @lru_cache(maxsize=512)
 def _attr_pattern(attr: str) -> re.Pattern:
-    return re.compile(rf'(?:\s|^){re.escape(attr)}\s*:\s*(.+?)(?=\s*;;|\s*}}(?:\s*$)|\s*$)', re.MULTILINE)
+    return re.compile(rf'^\s*{re.escape(attr)}\s*:\s*(.+?)\s*$', re.MULTILINE)
 
 @lru_cache(maxsize=64)
 def _sql_block_pattern(attr: str) -> re.Pattern:
-    return re.compile(rf'(?:\s|^){re.escape(attr)}\s*:\s*(.*?);;', re.MULTILINE | re.DOTALL)
+    return re.compile(rf'^\s*{re.escape(attr)}\s*:\s*(.*?);;', re.MULTILINE | re.DOTALL)
 
 @lru_cache(maxsize=32)
 def _block_name_pattern(block_type: str) -> re.Pattern:
-    return re.compile(rf'(?:\s|^){re.escape(block_type)}\s*:\s*(\S+)\s*\{{', re.MULTILINE)
+    return re.compile(rf'^\s*{re.escape(block_type)}\s*:\s*(\S+)\s*\{{', re.MULTILINE)
 
 # ---------------------------------------------------------------------------
 # Core utilities
@@ -344,13 +344,15 @@ def parse_project(root_path: str) -> LookMLProject:
     """
     Walk directory recursively, parse all .lkml files.
     Skips __pycache__, hidden dirs, and files under 10 bytes.
+    Preserves ALL view/explore definitions across files (including duplicates),
+    so validators like check_duplicates can detect real conflicts.
     """
     root = Path(root_path)
     if not root.exists():
         raise FileNotFoundError(f"Project path does not exist: {root_path}")
 
-    all_views:    dict[str, LookMLView]    = {}
-    all_explores: dict[str, LookMLExplore] = {}
+    all_views:    list[LookMLView]    = []
+    all_explores: list[LookMLExplore] = []
 
     for file_path in root.rglob("*.lkml"):
         # Skip hidden dirs and tiny files
@@ -359,22 +361,21 @@ def parse_project(root_path: str) -> LookMLProject:
         if file_path.stat().st_size < 10:
             continue
         views, explores = parse_file(str(file_path))
-        for v in views:
-            all_views[v.name] = v
-        for e in explores:
-            all_explores[e.name] = e
+        all_views.extend(views)
+        all_explores.extend(explores)
 
     # Resolve @{Constant} references using manifest.lkml
     constants = parse_manifest(str(root_path))
     if constants:
-        for view in all_views.values():
+        for view in all_views:
             if view.sql_table_name and "@{" in view.sql_table_name:
                 view.sql_table_name = resolve_constants(view.sql_table_name, constants)
 
     return LookMLProject(
         name=root.name,
         root_path=str(root_path),
-        views=list(all_views.values()),
-        explores=list(all_explores.values()),
+        views=all_views,
+        explores=all_explores,
         manifest_constants=constants,
     )
+

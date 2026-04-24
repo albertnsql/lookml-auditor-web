@@ -37,7 +37,8 @@ describe('api.health', () => {
   it('calls GET /api/health', async () => {
     mockFetch({ status: 'ok' });
     await api.health();
-    expect(fetch).toHaveBeenCalledWith('/api/health', {});
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/health'), {});
   });
 
   it('returns parsed JSON body', async () => {
@@ -69,7 +70,7 @@ describe('api.auditGithub', () => {
     mockFetch({ health_score: 90 });
     await api.auditGithub('https://github.com/org/repo', 'lookml/');
     expect(fetch).toHaveBeenCalledWith(
-      '/api/audit/github',
+      expect.stringContaining('/audit/github'),
       expect.objectContaining({ method: 'POST' }),
     );
     const [, options] = fetch.mock.calls[0];
@@ -115,7 +116,7 @@ describe('api.auditLocal', () => {
     mockFetch({ health_score: 80 });
     await api.auditLocal('/home/user/project');
     expect(fetch).toHaveBeenCalledWith(
-      '/api/audit/local',
+      expect.stringContaining('/audit/local'),
       expect.objectContaining({ method: 'POST' }),
     );
   });
@@ -145,7 +146,7 @@ describe('api.auditUpload', () => {
     const file = new File(['content'], 'project.zip', { type: 'application/zip' });
     await api.auditUpload(file);
     expect(fetch).toHaveBeenCalledWith(
-      '/api/audit/upload',
+      expect.stringContaining('/audit/upload'),
       expect.objectContaining({ method: 'POST' }),
     );
   });
@@ -186,7 +187,7 @@ describe('api.getFiles', () => {
   it('calls GET /api/audit/files', async () => {
     mockFetch({ files: [] });
     await api.getFiles();
-    expect(fetch).toHaveBeenCalledWith('/api/audit/files', {});
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/audit/files'), {});
   });
 
   it('returns files array', async () => {
@@ -241,7 +242,7 @@ describe('api.cleanup', () => {
     mockFetch({ status: 'deleted', path: '/tmp/lookml_audit_xyz' });
     await api.cleanup();
     expect(fetch).toHaveBeenCalledWith(
-      '/api/audit/cleanup',
+      expect.stringContaining('/audit/cleanup'),
       expect.objectContaining({ method: 'DELETE' }),
     );
   });

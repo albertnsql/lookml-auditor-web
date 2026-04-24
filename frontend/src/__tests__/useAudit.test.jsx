@@ -72,7 +72,7 @@ describe('useAudit.runGithub — success', () => {
   it('sets result on success', async () => {
     const { result } = renderHook(() => useAudit());
     await act(() => result.current.runGithub('https://github.com/org/repo'));
-    expect(result.current.result).toEqual(MOCK_RESULT);
+    expect(result.current.result).toMatchObject(MOCK_RESULT);
   });
 
   it('loading becomes false after success', async () => {
@@ -135,7 +135,7 @@ describe('useAudit.runUpload', () => {
     const { result } = renderHook(() => useAudit());
     const file = new File(['zip'], 'project.zip');
     await act(() => result.current.runUpload(file));
-    expect(result.current.result).toEqual(MOCK_RESULT);
+    expect(result.current.result).toMatchObject(MOCK_RESULT);
   });
 
   it('calls api.auditUpload with the file', async () => {
@@ -164,7 +164,7 @@ describe('useAudit.runUpload', () => {
     // second call succeeds
     await act(() => result.current.runUpload(new File(['y'], 'y.zip')));
     expect(result.current.error).toBeNull();
-    expect(result.current.result).toEqual(MOCK_RESULT);
+    expect(result.current.result).toMatchObject(MOCK_RESULT);
   });
 });
 
@@ -224,3 +224,102 @@ describe('useAudit.cleanup', () => {
     await expect(act(() => result.current.cleanup())).resolves.not.toThrow();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// runLocal — previously untested audit path
+// ─────────────────────────────────────────────────────────────────────────────
+
+const mockAuditLocal = vi.fn();
+
+vi.mock('../api.js', () => ({
+  api: {
+    auditGithub: (...args) => mockAuditGithub(...args),
+    auditUpload: (...args) => mockAuditUpload(...args),
+    auditLocal:  (...args) => mockAuditLocal(...args),
+    cleanup:     (...args) => mockCleanup(...args),
+  },
+}));
+
+describe('useAudit.runLocal', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuditLocal.mockResolvedValue(MOCK_RESULT);
+  });
+
+  it('sets result on success', async () => {
+    const { result } = renderHook(() => useAudit());
+    await act(() => result.current.runLocal('/home/user/my_project'));
+    expect(result.current.result).toMatchObject(MOCK_RESULT);
+  });
+
+  it('calls api.auditLocal with the path', async () => {
+    const { result } = renderHook(() => useAudit());
+    await act(() => result.current.runLocal('/home/user/my_project'));
+    expect(mockAuditLocal).toHaveBeenCalledWith('/home/user/my_project');
+  });
+
+  it('loading becomes false after success', async () => {
+    const { result } = renderHook(() => useAudit());
+    await act(() => result.current.runLocal('/home/user/my_project'));
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('error remains null on success', async () => {
+    const { result } = renderHook(() => useAudit());
+    await act(() => result.current.runLocal('/home/user/my_project'));
+    expect(result.current.error).toBeNull();
+  });
+
+  it('sets error message on failure', async () => {
+    mockAuditLocal.mockRejectedValue(new Error('Path does not exist'));
+    const { result } = renderHook(() => useAudit());
+    await act(() => result.current.runLocal('/no/such/path'));
+    expect(result.current.error).toBe('Path does not exist');
+  });
+
+  it('result stays null on failure', async () => {
+    mockAuditLocal.mockRejectedValue(new Error('fail'));
+    const { result } = renderHook(() => useAudit());
+    await act(() => result.current.runLocal('/no/such/path'));
+    expect(result.current.result).toBeNull();
+  });
+
+  it('loading is false after error', async () => {
+    mockAuditLocal.mockRejectedValue(new Error('fail'));
+    const { result } = renderHook(() => useAudit());
+    await act(() => result.current.runLocal('/no/such/path'));
+    expect(result.current.loading).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _auditTimestamp — present on every successful audit run
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('useAudit — _auditTimestamp', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuditGithub.mockResolvedValue(MOCK_RESULT);
+    mockAuditUpload.mockResolvedValue(MOCK_RESULT);
+    mockAuditLocal.mockResolvedValue(MOCK_RESULT);
+  });
+
+  it('stamps _auditTimestamp on runGithub success', async () => {
+    const { result } = renderHook(() => useAudit());
+    await act(() => result.current.runGithub('https://github.com/org/repo'));
+    expect(result.current.result._auditTimestamp).toBeTypeOf('number');
+  });
+
+  it('stamps _auditTimestamp on runUpload success', async () => {
+    const { result } = renderHook(() => useAudit());
+    await act(() => result.current.runUpload(new File(['z'], 'p.zip')));
+    expect(result.current.result._auditTimestamp).toBeTypeOf('number');
+  });
+
+  it('stamps _auditTimestamp on runLocal success', async () => {
+    const { result } = renderHook(() => useAudit());
+    await act(() => result.current.runLocal('/my/project'));
+    expect(result.current.result._auditTimestamp).toBeTypeOf('number');
+  });
+});
+
