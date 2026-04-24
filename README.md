@@ -31,6 +31,9 @@ LookML Auditor scans your entire project and tells you what's broken, what's red
 
 <img width="1908" height="967" alt="image" src="https://github.com/user-attachments/assets/eac1e3f3-473e-4bfb-936a-26ae73d1eac4" />
 
+<img width="1918" height="968" alt="image" src="https://github.com/user-attachments/assets/478c3d9e-cc14-4a54-9a34-29ff88368501" />
+
+
 
 ---
 
