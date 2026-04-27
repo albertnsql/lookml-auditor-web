@@ -33,6 +33,14 @@ export default function Dashboard({ auditData, isLoading, onReset }) {
     search: ''
   });
 
+  // Target for navigating from Issues → File Viewer
+  const [fileViewerTarget, setFileViewerTarget] = useState(null);
+
+  const handleOpenInFileViewer = (filePath, lineNumber) => {
+    setFileViewerTarget({ path: filePath, line: lineNumber });
+    setActiveTab('fileviewer');
+  };
+
   const handleKpiClick = (filterType) => {
     setActiveTab('issues');
     
@@ -202,12 +210,13 @@ export default function Dashboard({ auditData, isLoading, onReset }) {
               isLoading={isLoading} 
               externalFilters={issueFilters}
               onFilterChange={setIssueFilters}
+              onOpenInFileViewer={handleOpenInFileViewer}
             />
           )}
           {activeTab === 'visuals'    && <VisualizationsTab result={auditData} />}
           {activeTab === 'inventory'  && <InventoryTab      result={auditData} />}
           {activeTab === 'rules'      && <AuditRulesTab     rules={RULES} />}
-          {activeTab === 'fileviewer' && <FileViewerTab     result={auditData} />}
+          {activeTab === 'fileviewer' && <FileViewerTab result={auditData} initialFile={fileViewerTarget?.path} initialLine={fileViewerTarget?.line} />}
           {activeTab === 'settings'   && <SettingsTab       result={auditData} onReset={onReset} />}
         </div>
       </div>

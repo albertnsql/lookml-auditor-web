@@ -91,28 +91,41 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
 
   const simulateProgress = (estimatedSeconds = 15) => {
     const stages = [
-      { at: 0, percent: 3, stage: 'Connecting to repository...' },
-      { at: 0.05, percent: 10, stage: 'Cloning repository...' },
-      { at: 0.15, percent: 22, stage: 'Discovering LookML files...' },
-      { at: 0.25, percent: 35, stage: 'Parsing view files...' },
-      { at: 0.38, percent: 48, stage: 'Parsing explore definitions...' },
-      { at: 0.50, percent: 60, stage: 'Resolving field references...' },
-      { at: 0.62, percent: 70, stage: 'Running audit checks...' },
-      { at: 0.72, percent: 78, stage: 'Detecting duplicate definitions...' },
-      { at: 0.80, percent: 85, stage: 'Checking join integrity...' },
-      { at: 0.87, percent: 90, stage: 'Analyzing field quality...' },
-      { at: 0.93, percent: 94, stage: 'Computing health score...' },
-      { at: 0.97, percent: 97, stage: 'Finalizing results...' },
+      { at: 0, stage: 'Connecting to repository...' },
+      { at: 0.05, stage: 'Cloning repository...' },
+      { at: 0.15, stage: 'Discovering LookML files...' },
+      { at: 0.25, stage: 'Parsing view files...' },
+      { at: 0.38, stage: 'Parsing explore definitions...' },
+      { at: 0.50, stage: 'Resolving field references...' },
+      { at: 0.62, stage: 'Running audit checks...' },
+      { at: 0.72, stage: 'Detecting duplicate definitions...' },
+      { at: 0.80, stage: 'Checking join integrity...' },
+      { at: 0.87, stage: 'Analyzing field quality...' },
+      { at: 0.93, stage: 'Computing health score...' },
+      { at: 0.97, stage: 'Finalizing results...' },
     ];
+
+    // Clamp the estimated seconds so very fast previous runs don't cause instant 99%
+    // Default to 20 seconds for a more realistic baseline
+    const baseSeconds = Math.max(20, Math.min(estimatedSeconds, 60));
+    
+    // Time constant controls how fast the asymptotic curve grows
+    // baseSeconds / 2 means it reaches ~86% at baseSeconds.
+    const timeConstant = baseSeconds / 2;
 
     const startTime = Date.now();
     progressTimer.current = setInterval(() => {
       const elapsed = (Date.now() - startTime) / 1000;
-      const progress = Math.min(elapsed / estimatedSeconds, 0.99); // Allow closer to 100%
+      
+      // Asymptotic approach to 0.99. Slows down as it approaches 99%.
+      let progress = 1 - Math.exp(-elapsed / timeConstant);
+      progress = Math.min(progress, 0.99); // Cap at 99%
+
       const currentStage = [...stages].reverse().find(s => progress >= s.at);
+      
       setAuditProgress(p => ({
         ...p,
-        percent: currentStage?.percent ?? 0,
+        percent: Math.floor(progress * 100),
         stage: currentStage?.stage ?? 'Initializing...',
         timeElapsed: Math.floor(elapsed)
       }));
@@ -239,9 +252,11 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
           <span style={{ font: '18px Sora', fontWeight: 700, color: '#1E1B4B' }}>LookML Auditor</span>
         </div>
         <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
+          <a href="/how-it-works" style={{ font: '14px Sora', fontWeight: 600, color: '#1E1B4B', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={e => e.target.style.color = '#635BFF'} onMouseLeave={e => e.target.style.color = '#1E1B4B'}>How it works</a>
           <a href="/rules" style={{ font: '14px Sora', fontWeight: 600, color: '#1E1B4B', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={e => e.target.style.color = '#635BFF'} onMouseLeave={e => e.target.style.color = '#1E1B4B'}>Rules</a>
           <a href="https://github.com/albertnsql/lookml-auditor-web" target="_blank" rel="noreferrer" style={{ font: '14px Sora', fontWeight: 600, color: '#1E1B4B', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={e => e.target.style.color = '#635BFF'} onMouseLeave={e => e.target.style.color = '#1E1B4B'}>GitHub</a>
         </div>
+
       </nav>
 
       {/* Hero Section */}

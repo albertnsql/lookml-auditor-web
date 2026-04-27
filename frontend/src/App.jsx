@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import './index.css';
-import LandingPage from './components/LandingPage';
-import Dashboard   from './components/Dashboard';
-import RulesPage   from './components/RulesPage';
-import ScrollToTop from './components/ScrollToTop';
+import LandingPage      from './components/LandingPage';
+import Dashboard        from './components/Dashboard';
+import RulesPage        from './components/RulesPage';
+import HowItWorksPage   from './components/HowItWorksPage';
+import ScrollToTop      from './components/ScrollToTop';
 import { useAudit } from './hooks/useAudit';
 
 export default function App() {
@@ -21,7 +22,9 @@ export default function App() {
   return (
     <>
       <ScrollToTop />
-      {path === '/rules' ? (
+      {path === '/how-it-works' ? (
+        <HowItWorksPage />
+      ) : path === '/rules' ? (
         <RulesPage />
       ) : auditData ? (
         <Dashboard auditData={auditData} isLoading={loading} onReset={reset} />

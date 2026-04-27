@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { RULES } from '../../data/rules';
 
-const gridCols = '80px 130px 130px 1fr 150px 130px 45px';
+const gridCols = '84px 140px 140px 1fr 130px 48px';
 
-export default function IssuesTab({ auditData, isLoading, externalFilters, onFilterChange }) {
+export default function IssuesTab({ auditData, isLoading, externalFilters, onFilterChange, onOpenInFileViewer }) {
   const { issues } = auditData;
 
   const filters = externalFilters;
@@ -505,7 +505,7 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', overflowX: 'auto' }}>
           <div style={{ minWidth: '850px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: '16px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', padding: '10px 20px', fontSize: '11px', fontFamily: 'Sora, sans-serif', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-2)', fontWeight: 600 }}>
-              <div>Severity</div><div>Category</div><div>Object</div><div>Message</div><div>Suggestion</div><div>File</div><div>Line</div>
+              <div>Severity</div><div>Category</div><div>Object</div><div>Message</div><div>File</div><div>Line</div>
             </div>
 
           {filteredIssues.length === 0 ? (
@@ -550,6 +550,7 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
                             isAlt={idx % 2 === 1}
                             isExpanded={expandedId === (issue.id || `${filename}-${idx}`)}
                             onToggle={() => setExpandedId(expandedId === (issue.id || `${filename}-${idx}`) ? null : (issue.id || `${filename}-${idx}`))}
+                            onOpenInFileViewer={onOpenInFileViewer}
                           />
                         ))}
                       </div>
@@ -793,7 +794,7 @@ function SevPill({ type, active, onClick }) {
   );
 }
 
-function IssueRow({ issue, isAlt, isExpanded, onToggle }) {
+function IssueRow({ issue, isAlt, isExpanded, onToggle, onOpenInFileViewer }) {
   const [hovered, setHovered] = useState(false);
 
   const isErr = issue.severity === 'error';
@@ -806,6 +807,7 @@ function IssueRow({ issue, isAlt, isExpanded, onToggle }) {
 
   const objName = getObjectName(issue);
   const fileName = (issue.source_file || '').split(/[/\\]/).pop() || 'unknown';
+  const ruleMeta = getRuleMeta(issue);
 
   return (
     <>
@@ -836,74 +838,108 @@ function IssueRow({ issue, isAlt, isExpanded, onToggle }) {
         <div style={{ fontSize: '13px', color: 'var(--text-1)', fontFamily: 'Inter, sans-serif', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {issue.message}
         </div>
-        <div style={{ fontSize: '12px', color: 'var(--text-2)', fontFamily: 'Inter, sans-serif', fontStyle: 'italic', lineHeight: 1.4 }}>
-          {issue.suggestion || 'No suggestion available.'}
-        </div>
         <div style={{ fontSize: '12px', color: 'var(--text-2)', fontFamily: "'Fira Code', monospace", wordBreak: 'break-all' }}>
           {fileName}
         </div>
-        <div style={{ fontSize: '12px', color: 'var(--text-3)', fontFamily: "'Fira Code', monospace" }}>
+        <div style={{ fontSize: '12px', color: 'var(--text-3)', fontFamily: "'Fira Code', monospace", display: 'flex', alignItems: 'center', gap: '4px' }}>
           {issue.line_number || '-'}
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="{isExpanded ? '18 15 12 9 6 15' : '6 9 12 15 18 9'}"/></svg>
         </div>
       </div>
       
       {isExpanded && (
-        <div style={{ 
-          background: '#F9F8FF', 
+        <div style={{
+          background: '#F9F8FF',
           borderLeft: `3px solid ${sevColor}`,
           borderBottom: '1px solid #E2DFF5',
-          borderRadius: '0 0 8px 8px',
-          padding: '16px 20px 20px 20px',
-          display: 'flex', gap: '32px', alignItems: 'flex-start',
+          padding: '0 20px 20px 20px',
           animation: 'fadeSlideUp 150ms ease-out'
         }}>
-          {/* Left Column: LookML Fix Preview */}
-          <div style={{ flex: 1, position: 'relative' }}>
-            <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', fontWeight: 600, color: '#9CA3AF', letterSpacing: '0.08em', marginBottom: '8px' }}>SUGGESTED FIX</div>
-            <div style={{ position: 'relative', background: '#0F0E1A', borderRadius: '8px', padding: '14px 16px', border: '1px solid #1E1B4B' }}>
-              <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 10 }}>
-                <CopyButton text={getRuleMeta(issue).goodExample || issue.suggestion || issue.message} ghost={true} />
-              </div>
-              <LookMLSnippet code={getRuleMeta(issue).goodExample || '# No specific fix snippet available\n# Please refer to suggestion column'} />
-            </div>
+
+          {/* Full message strip */}
+          <div style={{
+            padding: '12px 14px',
+            background: badgeBg,
+            border: `1px solid ${badgeBdr}`,
+            borderRadius: '8px',
+            margin: '12px 0 16px 0',
+            fontFamily: 'Inter, sans-serif',
+            fontSize: '13px',
+            lineHeight: 1.6,
+            color: 'var(--text-1)'
+          }}>
+            <span style={{ fontFamily: 'Sora, sans-serif', fontWeight: 700, color: badgeCol, marginRight: '8px' }}>
+              {issue.severity.toUpperCase()}
+            </span>
+            {issue.message}
           </div>
 
-          {/* Right Column: Context Metadata */}
-          <div style={{ width: '340px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div>
-              <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', fontWeight: 600, color: '#9CA3AF', letterSpacing: '0.08em', marginBottom: '6px' }}>FILE LOCATION</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ 
-                  display: 'inline-flex', alignItems: 'center', gap: '8px',
-                  background: '#F3F4F6', border: '1px solid #E2DFF5', borderRadius: '6px',
-                  padding: '6px 10px', fontFamily: 'Inter, sans-serif', fontSize: '12px', color: '#1E1B4B'
-                }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                  <span style={{ fontFamily: "'Fira Code', monospace" }}>{issue.source_file}</span>
+          {/* Two-column: suggestion (left) + metadata (right) */}
+          <div style={{ display: 'flex', gap: '32px', alignItems: 'flex-start' }}>
+
+            {/* Left: Suggestion text */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {issue.suggestion ? (
+                <>
+                  <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', fontWeight: 600, color: '#9CA3AF', letterSpacing: '0.08em', marginBottom: '8px' }}>SUGGESTION</div>
+                  <div style={{
+                    fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--text-1)',
+                    lineHeight: 1.6, background: '#FFFFFF', border: '1px solid #E2DFF5',
+                    borderRadius: '8px', padding: '12px 14px'
+                  }}>
+                    {issue.suggestion}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: 'var(--text-3)', fontStyle: 'italic' }}>
+                  No suggestion available for this issue.
+                </div>
+              )}
+            </div>
+
+            {/* Right: Rule, Line, Impact, File Viewer button */}
+            <div style={{ width: '260px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+              {/* Rule + Line badges */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ display: 'inline-flex', background: '#F3F4F6', border: '1px solid #E2DFF5', borderRadius: '6px', padding: '3px 10px', color: '#635BFF', fontFamily: "'Fira Code', monospace", fontSize: '11px', fontWeight: 600 }}>
+                  {ruleMeta.id || issue.category?.toLowerCase().replace(/ /g, '_') || 'unknown_rule'}
                 </div>
                 {issue.line_number && (
-                  <div style={{
-                    background: 'rgba(99,91,255,0.08)', color: '#635BFF', border: '1px solid rgba(99,91,255,0.2)',
-                    borderRadius: '4px', padding: '2px 8px', fontFamily: 'Sora, sans-serif', fontSize: '11px', fontWeight: 600
-                  }}>
+                  <div style={{ background: 'rgba(99,91,255,0.08)', color: '#635BFF', border: '1px solid rgba(99,91,255,0.2)', borderRadius: '4px', padding: '3px 8px', fontFamily: 'Sora, sans-serif', fontSize: '11px', fontWeight: 600 }}>
                     Line {issue.line_number}
                   </div>
                 )}
               </div>
-            </div>
 
-            <div>
-              <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', fontWeight: 600, color: '#9CA3AF', letterSpacing: '0.08em', marginBottom: '6px' }}>RULE</div>
-              <div style={{ display: 'inline-flex', background: '#F3F4F6', border: '1px solid #E2DFF5', borderRadius: '6px', padding: '4px 10px', color: '#635BFF', fontFamily: "'Fira Code', monospace", fontSize: '12px', fontWeight: 600 }}>
-                {getRuleMeta(issue).id || 'unknown_rule'}
+              {/* Impact */}
+              <div>
+                <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', fontWeight: 600, color: '#9CA3AF', letterSpacing: '0.08em', marginBottom: '4px' }}>IMPACT</div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '12px', color: isErr ? '#DC2626' : isWrn ? '#D97706' : '#2563EB', lineHeight: 1.5, fontWeight: 500 }}>
+                  {getImpactText(issue)}
+                </div>
               </div>
-            </div>
 
-            <div>
-              <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '10px', fontWeight: 600, color: '#9CA3AF', letterSpacing: '0.08em', marginBottom: '4px' }}>IMPACT</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: isErr ? '#DC2626' : isWrn ? '#D97706' : '#2563EB', lineHeight: 1.5, fontWeight: 500 }}>
-                {getImpactText(issue)}
-              </div>
+              {/* Open in File Viewer button */}
+              {onOpenInFileViewer && issue.source_file && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onOpenInFileViewer(issue.source_file, issue.line_number); }}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '7px',
+                    background: 'rgba(99,91,255,0.07)', border: '1px solid rgba(99,91,255,0.25)',
+                    borderRadius: '8px', padding: '8px 14px',
+                    fontFamily: 'Sora, sans-serif', fontSize: '12px', fontWeight: 600,
+                    color: '#635BFF', cursor: 'pointer', transition: '150ms ease',
+                    width: '100%', justifyContent: 'center'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,91,255,0.14)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(99,91,255,0.07)'}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  Open in File Viewer
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -913,9 +949,51 @@ function IssueRow({ issue, isAlt, isExpanded, onToggle }) {
 }
 
 function getRuleMeta(issue) {
-  return RULES.find(r => r.category === issue.category && (issue.message.includes(r.title) || issue.rule_id === r.id)) || 
+  return RULES.find(r => r.category === issue.category && (issue.message?.includes(r.title) || issue.rule_id === r.id)) || 
          RULES.find(r => r.category === issue.category) || 
          {};
+}
+
+// Generates an issue-specific LookML fix snippet based on the issue's category and context
+function getIssueFixSnippet(issue) {
+  const obj = getObjectName(issue);
+  const cat = (issue.category || '').toLowerCase();
+  const file = (issue.source_file || '').split(/[/\\]/).pop().replace('.lkml', '') || 'my_view';
+
+  // Use the rule's goodExample if it matches the specific issue context
+  const ruleMeta = getRuleMeta(issue);
+  if (ruleMeta.goodExample && ruleMeta.goodExample.trim() && !ruleMeta.goodExample.includes('customers.view')) {
+    return ruleMeta.goodExample;
+  }
+
+  // Generate issue-specific snippets based on category
+  if (cat.includes('duplicate')) {
+    const field = issue.field || obj || 'my_field';
+    return `# Remove or rename the duplicate definition\n# in ${file}.lkml\n\ndimension: ${field} {\n  # Keep only ONE definition of this field\n  # Remove the duplicate from the other view\n  sql: \${TABLE}.${field} ;;\n}`;
+  }
+
+  if (cat.includes('broken reference') || cat.includes('broken ref')) {
+    const ref = issue.field || obj || 'missing_field';
+    return `# Fix broken reference in ${file}.lkml\n\n# Option 1: Define the missing field\ndimension: ${ref} {\n  type: string\n  sql: \${TABLE}.${ref} ;;\n}\n\n# Option 2: Remove the reference that points to\n# this non-existent field`;
+  }
+
+  if (cat.includes('join integrity') || cat.includes('join')) {
+    const explore = issue.explore || obj || 'my_explore';
+    return `# Fix join integrity in ${explore}\n\nexplore: ${explore} {\n  join: ${obj} {\n    type: left_outer\n    sql_on: \${${explore}.id} = \${${obj}.${explore}_id} ;;\n    relationship: many_to_one\n  }\n}`;
+  }
+
+  if (cat.includes('field quality') || cat.includes('missing label')) {
+    const dim = issue.field || obj || 'my_dimension';
+    return `# Add metadata to ${dim} in ${file}.lkml\n\ndimension: ${dim} {\n  label: "${dim.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}"\n  description: "Describe what this field represents"\n  sql: \${TABLE}.${dim} ;;\n}`;
+  }
+
+  if (cat.includes('orphan')) {
+    return `# View '${obj}' is not referenced by any explore.\n# Option 1: Reference it in an explore\nexplore: my_explore {\n  join: ${obj} {\n    type: left_outer\n    sql_on: ... ;;\n    relationship: many_to_one\n  }\n}\n\n# Option 2: Delete ${file}.lkml if unused`;
+  }
+
+  // Fallback: show the suggestion text as a comment
+  const suggestion = issue.suggestion || issue.message || 'Review this issue.';
+  return `# ${file}.lkml — Line ${issue.line_number || '?'}\n# Object: ${obj}\n\n# Suggestion:\n${suggestion.split('\n').map(l => '# ' + l).join('\n')}`;
 }
 
 function getImpactText(issue) {

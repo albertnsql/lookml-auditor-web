@@ -1,0 +1,103 @@
+/* ── HowItWorksPage styles ── */
+
+.hiw-page { background: linear-gradient(160deg,#F5F3FF 0%,#EEF2FF 50%,#F8FAFC 100%); min-height:100vh; font-family:'Inter',sans-serif; }
+
+/* Hero */
+.hiw-hero { position:relative; text-align:center; padding:100px 48px 80px; overflow:hidden; }
+.hiw-hero-orb1 { position:absolute; top:-80px; left:-80px; width:400px; height:400px; border-radius:50%; background:radial-gradient(circle,rgba(99,91,255,0.12),transparent 70%); pointer-events:none; animation:hiwOrb 8s ease-in-out infinite; }
+.hiw-hero-orb2 { position:absolute; bottom:-60px; right:-60px; width:360px; height:360px; border-radius:50%; background:radial-gradient(circle,rgba(139,92,246,0.1),transparent 70%); pointer-events:none; animation:hiwOrb 10s ease-in-out infinite reverse; }
+.hiw-hero-badge { display:inline-flex; align-items:center; gap:8px; background:rgba(99,91,255,0.08); border:1px solid rgba(99,91,255,0.2); border-radius:24px; padding:6px 18px; margin-bottom:28px; }
+.hiw-hero-badge-dot { width:6px; height:6px; border-radius:50%; background:#4ADE80; animation:hiwPulse 2s ease-in-out infinite; }
+.hiw-hero-badge-text { font-family:'Sora',sans-serif; font-size:11px; font-weight:700; color:#635BFF; letter-spacing:0.1em; }
+.hiw-hero-title { font-family:'Sora',sans-serif; font-size:clamp(32px,5vw,56px); font-weight:800; color:#1E1B4B; letter-spacing:-2px; line-height:1.08; margin-bottom:24px; }
+.hiw-hero-title span { background:linear-gradient(135deg,#635BFF,#8B5CF6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.hiw-hero-sub { font-size:18px; color:#6B7280; max-width:540px; margin:0 auto 56px; line-height:1.7; }
+
+/* Stats row */
+.hiw-stats { display:flex; justify-content:center; gap:0; max-width:700px; margin:0 auto; background:#fff; border:1px solid #E2DFF5; border-radius:16px; box-shadow:0 4px 32px rgba(99,91,255,0.08); overflow:hidden; }
+.hiw-stat { flex:1; padding:28px 24px; text-align:center; border-right:1px solid #F0EEFF; position:relative; }
+.hiw-stat:last-child { border-right:none; }
+.hiw-stat-num { font-family:'Sora',sans-serif; font-size:36px; font-weight:800; color:#1E1B4B; line-height:1; margin-bottom:6px; }
+.hiw-stat-num span { font-size:20px; color:#9CA3AF; font-weight:600; }
+.hiw-stat-label { font-size:12px; color:#9CA3AF; font-weight:500; }
+
+/* Steps */
+.hiw-steps { max-width:1100px; margin:80px auto 0; padding:0 48px 80px; }
+.hiw-step { display:grid; grid-template-columns:1fr 1fr; gap:72px; align-items:center; margin-bottom:120px; }
+.hiw-step.rev { direction:rtl; }
+.hiw-step.rev > * { direction:ltr; }
+.hiw-step-text { }
+.hiw-step-badge { display:inline-flex; align-items:center; gap:8px; border-radius:20px; padding:5px 14px; margin-bottom:20px; font-family:'Sora',sans-serif; font-size:11px; font-weight:800; letter-spacing:0.12em; }
+.hiw-step-title { font-family:'Sora',sans-serif; font-size:clamp(24px,2.5vw,32px); font-weight:800; color:#1E1B4B; letter-spacing:-0.5px; line-height:1.2; margin-bottom:16px; }
+.hiw-step-desc { font-size:16px; color:#6B7280; line-height:1.75; max-width:440px; }
+.hiw-step-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:24px; }
+.hiw-step-tag { display:inline-flex; align-items:center; gap:6px; background:#F8F7FF; border:1px solid #E2DFF5; border-radius:20px; padding:5px 12px; font-size:12px; font-weight:600; color:#635BFF; font-family:'Sora',sans-serif; }
+.hiw-step-num { font-family:'Sora',sans-serif; font-size:96px; font-weight:800; line-height:1; margin-top:24px; user-select:none; letter-spacing:-6px; opacity:0.07; }
+
+/* Visuals */
+.hiw-card { background:#fff; border-radius:18px; padding:28px; box-shadow:0 8px 40px rgba(99,91,255,0.09); border:1px solid #E2DFF5; }
+.hiw-code-win { background:#0F0E1A; border-radius:16px; padding:24px; border:1px solid #1E1B4B; box-shadow:0 12px 48px rgba(0,0,0,0.3); }
+.hiw-code-chrome { display:flex; gap:6px; margin-bottom:16px; align-items:center; }
+.hiw-code-dot { width:10px; height:10px; border-radius:50%; }
+.hiw-code-filename { margin-left:10px; font-family:'Sora',sans-serif; font-size:11px; color:#4A5568; }
+.hiw-code-line { display:flex; align-items:center; padding:3px 8px; border-radius:4px; transition:background 0.15s; }
+.hiw-code-ln { color:#374151; font-family:'Fira Code',monospace; font-size:10px; width:22px; flex-shrink:0; user-select:none; }
+.hiw-code-txt { font-family:'Fira Code',monospace; font-size:11px; }
+.hiw-scan-active { background:rgba(99,91,255,0.18)!important; }
+.hiw-scan-beam { position:absolute; left:0; right:0; height:100%; background:linear-gradient(90deg,rgba(99,91,255,0.15),transparent); border-radius:4px; pointer-events:none; }
+
+/* Checklist visual */
+.hiw-check-item { display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:10px; border:1px solid #F3F0FF; margin-bottom:10px; transition:box-shadow 0.2s; }
+.hiw-check-item:hover { box-shadow:0 4px 16px rgba(99,91,255,0.08); }
+.hiw-check-icon { width:26px; height:26px; border-radius:50%; background:#F0FDF4; border:1.5px solid #4ADE80; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.hiw-sev { border-radius:6px; padding:2px 8px; font-family:'Sora',sans-serif; font-size:10px; font-weight:700; text-transform:uppercase; border-left:3px solid; }
+.hiw-sev-error { background:#FEF2F2; color:#EF4444; border-color:#EF4444; }
+.hiw-sev-warn  { background:#FFFBEB; color:#F59E0B; border-color:#F59E0B; }
+.hiw-sev-info  { background:#EFF6FF; color:#3B82F6; border-color:#3B82F6; }
+
+/* Report visual */
+.hiw-score-ring { transform-origin:center; transform:rotate(-90deg); transition:stroke-dasharray 1.8s cubic-bezier(.4,0,.2,1); }
+.hiw-score-card { background:linear-gradient(135deg,#F0EEFF,#EEF2FF); border-radius:14px; padding:22px 24px; border:1px solid #E2DFF5; display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.hiw-export { display:flex; align-items:center; gap:8px; background:#F8F7FF; border:1px dashed #C4BFEE; border-radius:10px; padding:10px 14px; cursor:pointer; transition:background 0.2s; margin-top:14px; }
+.hiw-export:hover { background:#EEF2FF; }
+
+/* FAQ */
+.hiw-faq { max-width:760px; margin:0 auto; padding:80px 48px; }
+.hiw-faq-item { border:1px solid #E2DFF5; border-radius:14px; margin-bottom:12px; overflow:hidden; transition:box-shadow 0.2s; background:#fff; }
+.hiw-faq-item:hover { box-shadow:0 4px 20px rgba(99,91,255,0.08); }
+.hiw-faq-q { display:flex; align-items:center; justify-content:space-between; padding:20px 24px; cursor:pointer; font-family:'Sora',sans-serif; font-size:14px; font-weight:700; color:#1E1B4B; gap:16px; }
+.hiw-faq-a { font-size:14px; color:#6B7280; line-height:1.7; padding:0 24px 20px; }
+.hiw-faq-chevron { flex-shrink:0; transition:transform 0.25s; color:#635BFF; }
+.hiw-faq-open .hiw-faq-chevron { transform:rotate(180deg); }
+
+/* Trust */
+.hiw-trust { background:linear-gradient(135deg, #635BFF 0%, #8B5CF6 100%); padding:80px 48px; text-align:center; position:relative; overflow:hidden; }
+.hiw-trust-pills { display:flex; justify-content:center; gap:14px; flex-wrap:wrap; margin-top:32px; position:relative; z-index:1; }
+.hiw-trust-pill { display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.25); border-radius:24px; padding:8px 18px; font-family:'Sora',sans-serif; font-size:12px; font-weight:600; color:rgba(255,255,255,0.95); }
+
+/* Animations */
+@keyframes hiwOrb { 0%,100%{transform:scale(1) translate(0,0)} 50%{transform:scale(1.15) translate(20px,-20px)} }
+@keyframes hiwPulse { 0%,100%{opacity:0.5;transform:scale(0.9)} 50%{opacity:1;transform:scale(1)} }
+@keyframes hiwBlink { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes hiwFadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+@keyframes hiwSlideIn { from{opacity:0;transform:translateX(-20px)} to{opacity:1;transform:translateX(0)} }
+@keyframes hiwFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+
+.hiw-in { animation:hiwFadeUp 0.6s ease-out both; }
+.hiw-in-1 { animation-delay:0.1s; }
+.hiw-in-2 { animation-delay:0.25s; }
+.hiw-in-3 { animation-delay:0.4s; }
+.hiw-in-4 { animation-delay:0.55s; }
+
+/* Responsive */
+@media(max-width:900px) {
+  .hiw-step { grid-template-columns:1fr; gap:32px; }
+  .hiw-step.rev { direction:ltr; }
+  .hiw-hero { padding:72px 24px 56px; }
+  .hiw-steps { padding:0 24px 60px; }
+  .hiw-stats { flex-direction:column; }
+  .hiw-stat { border-right:none; border-bottom:1px solid #F0EEFF; }
+  .hiw-stat:last-child { border-bottom:none; }
+  .hiw-faq { padding:60px 24px; }
+  .hiw-trust { padding:60px 24px; }
+}

@@ -18,3 +18,9 @@
 .nav-issues-badge {
   animation: issuePulse 2s infinite;
 }
+
+@keyframes highlightPulse {
+  0%   { background: rgba(99,91,255,0.25); }
+  60%  { background: rgba(99,91,255,0.12); }
+  100% { background: rgba(99,91,255,0.12); }
+}

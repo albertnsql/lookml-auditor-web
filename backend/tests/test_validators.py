@@ -236,6 +236,37 @@ class TestDuplicateSQL:
         p = make_project(views=[v])
         assert check_duplicate_sql(p) == []
 
+    def test_dimension_and_measure_same_sql_not_flagged(self, make_field, make_view, make_project):
+        """A dimension and a measure sharing the same SQL column is valid LookML — should not be flagged."""
+        dim = make_field("item_cost",  field_type="dimension", sql="${TABLE}.item_cost")
+        msr = make_field("item_costm", field_type="measure",   sql="${TABLE}.item_cost")
+        v = make_view("np_margin_fact", fields=[dim, msr])
+        p = make_project(views=[v])
+        issues = check_duplicate_sql(p)
+        warnings = [i for i in issues if i.severity == Severity.WARNING]
+        assert warnings == [], f"Unexpected false-positive: {[i.message for i in warnings]}"
+
+    def test_two_dimensions_same_sql_is_flagged(self, make_field, make_view, make_project):
+        """Two dimensions sharing the same SQL expression IS a real duplicate and should warn."""
+        f1 = make_field("item_cost",   field_type="dimension", sql="${TABLE}.item_cost")
+        f2 = make_field("item_cost_v2", field_type="dimension", sql="${TABLE}.item_cost")
+        v = make_view("np_margin_fact", fields=[f1, f2])
+        p = make_project(views=[v])
+        issues = check_duplicate_sql(p)
+        warnings = [i for i in issues if i.severity == Severity.WARNING]
+        assert len(warnings) >= 1
+
+    def test_two_measures_same_sql_is_flagged(self, make_field, make_view, make_project):
+        """Two measures sharing the same SQL expression IS a real duplicate and should warn."""
+        m1 = make_field("total_cost",  field_type="measure", sql="${TABLE}.item_cost")
+        m2 = make_field("total_cost2", field_type="measure", sql="${TABLE}.item_cost")
+        v = make_view("np_margin_fact", fields=[m1, m2])
+        p = make_project(views=[v])
+        issues = check_duplicate_sql(p)
+        warnings = [i for i in issues if i.severity == Severity.WARNING]
+        assert len(warnings) >= 1
+
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # check_join_integrity

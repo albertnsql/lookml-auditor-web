@@ -2,10 +2,15 @@
 Validator: Duplicate SQL Expressions within a View
 ----------------------------------------------------
 Cases 3 & 4:
-  - Case 3: Two measures with same SQL but different value_format/filters
-    → WARNING, clearly named as dimension/measure, shows value_format diff hint
-  - Case 4: If one of the duplicate fields is a primary key → INFO (often intentional alias)
+  - Case 3: Two or more fields of the **same broad type** (both dimensions /
+    dimension_groups, OR both measures) share identical SQL → WARNING.
+    A dimension and a measure sharing the same SQL column is intentional and
+    valid LookML (the dimension exposes the raw value; the measure aggregates
+    it), so cross-type pairs are silently ignored.
+  - Case 4: If one of the duplicate fields is a primary key → INFO
+    (sharing SQL with a PK is often an intentional alias).
 """
+
 from __future__ import annotations
 from collections import defaultdict
 from lookml_parser.models import LookMLProject, LookMLField, LookMLView
@@ -70,31 +75,45 @@ def check_duplicate_sql(project: LookMLProject) -> list[Issue]:
                 continue
 
             # Case 3: regular duplicate SQL — WARNING
-            # Build per-field detail for the message
-            field_details = []
-            for f in fields:
-                vf = getattr(f, 'value_format', None) or ""
-                detail = f"'{f.name}' ({_field_kind(f)})"
-                if vf:
-                    detail += f" [format: {vf}]"
-                field_details.append(detail)
-            detail_str = ", ".join(field_details)
+            # A dimension and a measure sharing the same underlying SQL column is
+            # intentional and valid in LookML (dimension exposes the raw value,
+            # measure aggregates it).  Only flag when 2+ fields of the *same*
+            # broad type share identical SQL.
 
-            issues.append(Issue(
-                category=IssueCategory.DUPLICATE,
-                severity=Severity.WARNING,
-                message=(
-                    f"Duplicate SQL in view '{view.name}': {detail_str} share identical SQL"
-                ),
-                object_type="field",
-                object_name=f"{view.name}.*",
-                source_file=view.source_file,
-                line_number=view.line_number,
-                suggestion=(
-                    f"Fields {', '.join(repr(n) for n in names)} in view '{view.name}' "
-                    "share the same SQL expression. If intentional (e.g. different value formats), "
-                    "add a comment to document the intent. Otherwise remove the redundant definition."
-                ),
-            ))
+            # Split into two buckets: dimension-like vs measure-like
+            dimension_fields = [f for f in fields if f.field_type in ("dimension", "dimension_group")]
+            measure_fields   = [f for f in fields if f.field_type == "measure"]
+
+            for bucket in (dimension_fields, measure_fields):
+                if len(bucket) < 2:
+                    continue  # Only one field of this type — not a duplicate
+
+                bucket_names = [f.name for f in bucket]
+                field_details = []
+                for f in bucket:
+                    vf = getattr(f, 'value_format', None) or ""
+                    detail = f"'{f.name}' ({_field_kind(f)})"
+                    if vf:
+                        detail += f" [format: {vf}]"
+                    field_details.append(detail)
+                detail_str = ", ".join(field_details)
+
+                issues.append(Issue(
+                    category=IssueCategory.DUPLICATE,
+                    severity=Severity.WARNING,
+                    message=(
+                        f"Duplicate SQL in view '{view.name}': {detail_str} share identical SQL"
+                    ),
+                    object_type="field",
+                    object_name=f"{view.name}.*",
+                    source_file=view.source_file,
+                    line_number=view.line_number,
+                    suggestion=(
+                        f"Fields {', '.join(repr(n) for n in bucket_names)} in view '{view.name}' "
+                        "share the same SQL expression. If intentional (e.g. different value formats), "
+                        "add a comment to document the intent. Otherwise remove the redundant definition."
+                    ),
+                ))
 
     return issues
+
