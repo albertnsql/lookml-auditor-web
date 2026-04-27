@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../api';
 
 // --- Icons ---
@@ -66,6 +66,9 @@ const IconUpload = ({ size = 18 }) => (
 );
 
 export default function LandingPage({ onAuditDone, useAuditProps }) {
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
   const isProduction = window.location.hostname !== 'localhost';
   const { runGithub, runUpload, runLocal, loading } = useAuditProps;
   const [mode, setMode] = useState('github');
