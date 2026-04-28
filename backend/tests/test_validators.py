@@ -205,14 +205,22 @@ class TestDuplicateSQL:
         warnings = [i for i in issues if i.severity == Severity.WARNING]
         assert len(warnings) >= 1
 
-    def test_pk_sharing_sql_is_info(self, make_field, make_view, make_project):
+    def test_pk_sharing_sql_is_skipped(self, make_field, make_view, make_project):
+        """Sharing SQL with a primary key is often intentional and should be skipped."""
         pk = make_field("id", primary_key=True, sql="${TABLE}.id")
         alias = make_field("id_alias", sql="${TABLE}.id")
         v = make_view("orders", fields=[pk, alias])
         p = make_project(views=[v])
         issues = check_duplicate_sql(p)
-        infos = [i for i in issues if i.severity == Severity.INFO]
-        assert len(infos) >= 1
+        assert issues == []
+
+    def test_hidden_sharing_sql_is_skipped(self, make_field, make_view, make_project):
+        """Hidden fields are often intermediate or internal and should be skipped."""
+        f1 = make_field("f1", sql="${TABLE}.x", hidden=True)
+        f2 = make_field("f2", sql="${TABLE}.x")
+        v = make_view("v", fields=[f1, f2])
+        p = make_project(views=[v])
+        assert check_duplicate_sql(p) == []
 
     def test_short_sql_skipped(self, make_field, make_view, make_project):
         """SQL expressions < 5 chars or in skip-list must not be flagged."""

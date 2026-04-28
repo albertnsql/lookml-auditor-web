@@ -33,77 +33,66 @@ def check_duplicate_sql(project: LookMLProject) -> list[Issue]:
     SKIP = {"${table}", "1", "true", "false", "null", ""}
 
     for view in project.views:
-        # Map: (normalised SQL, filters) → list of LookMLField objects
-        sql_to_fields: dict[tuple[str, str | None], list[LookMLField]] = defaultdict(list)
+        # Map: (normalised SQL, filters, field_type, data_type, html, v_format, v_format_name) → list of LookMLField objects
+        sql_to_fields = defaultdict(list)
         for field in view.fields:
-            if not field.sql or field.field_type not in ("dimension", "dimension_group", "measure"):
+            # Only consider dimensions and measures
+            if not field.sql or field.field_type not in ("dimension", "measure"):
                 continue
+
+            # 1. Skip if primary key: it's infrastructure for joins, not a user field
+            if getattr(field, 'primary_key', False):
+                continue
+
+            # 2. Skip if hidden: often used for intermediate calculations or internal logic
+            if getattr(field, 'hidden', False):
+                continue
+
+            # 3. Skip if it belongs to a dimension_group: timeframe fields share base SQL by design
+            # (Note: already handled by only allowing "dimension" and "measure" above)
+
             norm = _normalise_sql(field.sql)
             if len(norm) < 5 or norm in SKIP:
                 continue
-            filt = field.filters.strip() if getattr(field, 'filters', None) else None
-            sql_to_fields[(norm, filt)].append(field)
 
-        for (norm_sql, filt), fields in sql_to_fields.items():
+            filt = field.filters.strip() if getattr(field, 'filters', None) else None
+            html = field.html.strip() if getattr(field, 'html', None) else None
+            v_format = field.value_format.strip() if getattr(field, 'value_format', None) else None
+            v_format_name = field.value_format_name.strip() if getattr(field, 'value_format_name', None) else None
+            
+            # Use a strict grouping key. Different types (e.g. yesno vs string) will 
+            # have different data_type and thus won't be flagged together.
+            group_key = (norm, filt, field.field_type, field.data_type, html, v_format, v_format_name)
+            sql_to_fields[group_key].append(field)
+
+        for group_key, fields in sql_to_fields.items():
             if len(fields) < 2:
                 continue
 
-            names = [f.name for f in fields]
-            has_pk = any(f.primary_key for f in fields)
-
-            # Case 4: one field is a primary key — INFO, not WARNING
-            if has_pk:
-                pk_field    = next(f for f in fields if f.primary_key)
-                other_fields= [f for f in fields if not f.primary_key]
-                other_names = ", ".join(f"'{f.name}'" for f in other_fields)
-                kinds       = ", ".join(f"({_field_kind(f)})" for f in other_fields)
-                issues.append(Issue(
-                    category=IssueCategory.DUPLICATE,
-                    severity=Severity.INFO,
-                    message=(
-                        f"Duplicate SQL in view '{view.name}': "
-                        f"'{pk_field.name}' (primary key) shares SQL with {other_names} {kinds}"
-                    ),
-                    object_type="field",
-                    object_name=f"{view.name}.{pk_field.name}",
-                    source_file=view.source_file,
-                    line_number=view.line_number,
-                    suggestion=(
-                        f"'{pk_field.name}' is a primary key — sharing SQL with {other_names} "
-                        "is often intentional. No action needed unless the duplication is unintended."
-                    ),
-                ))
-                continue
-
-            # Case 3: regular duplicate SQL — WARNING
-            # A dimension and a measure sharing the same underlying SQL column is
-            # intentional and valid in LookML (dimension exposes the raw value,
-            # measure aggregates it).  Only flag when 2+ fields of the *same*
-            # broad type share identical SQL.
-
-            # Split into two buckets: dimension-like vs measure-like
-            dimension_fields = [f for f in fields if f.field_type in ("dimension", "dimension_group")]
+            # Split into buckets: dimensions vs measures
+            dimension_fields = [f for f in fields if f.field_type == "dimension"]
             measure_fields   = [f for f in fields if f.field_type == "measure"]
 
             for bucket in (dimension_fields, measure_fields):
                 if len(bucket) < 2:
-                    continue  # Only one field of this type — not a duplicate
+                    continue  # Only one field of this type in this SQL group — not a duplicate
 
                 bucket_names = [f.name for f in bucket]
                 field_details = []
                 for f in bucket:
-                    vf = getattr(f, 'value_format', None) or ""
                     detail = f"'{f.name}' ({_field_kind(f)})"
+                    vf = getattr(f, 'value_format', None) or ""
                     if vf:
                         detail += f" [format: {vf}]"
                     field_details.append(detail)
+                
                 detail_str = ", ".join(field_details)
 
                 issues.append(Issue(
                     category=IssueCategory.DUPLICATE,
                     severity=Severity.WARNING,
                     message=(
-                        f"Duplicate SQL in view '{view.name}': {detail_str} share identical SQL. [DEBUG filt={filt}]"
+                        f"Duplicate SQL in view '{view.name}': {detail_str} share identical SQL."
                     ),
                     object_type="field",
                     object_name=f"{view.name}.*",

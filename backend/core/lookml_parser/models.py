@@ -12,6 +12,9 @@ class LookMLField(BaseModel):
     field_type: str          # "dimension" | "measure" | "dimension_group" | "filter"
     data_type: Optional[str] = None
     sql: Optional[str] = None
+    html: Optional[str] = None
+    value_format: Optional[str] = None
+    value_format_name: Optional[str] = None
     label: Optional[str] = None
     description: Optional[str] = None
     hidden: bool = False
