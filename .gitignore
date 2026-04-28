@@ -36,3 +36,6 @@ env/
 htmlcov/
 *.pyc
 __pycache__/
+
+backend/venv/
+backend/tests/__pycache__
