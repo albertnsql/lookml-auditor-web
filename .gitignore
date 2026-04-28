@@ -15,16 +15,24 @@ dist-ssr
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env
+.pytest_cache/
+.coverage
+htmlcov/
 *.pyc
-
-# Ignore Web folder
-#lookml-auditor-web/
-
-backend/__pycache__/*.pyc
+__pycache__/

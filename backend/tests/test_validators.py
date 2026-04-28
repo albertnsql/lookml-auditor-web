@@ -266,6 +266,12 @@ class TestDuplicateSQL:
         warnings = [i for i in issues if i.severity == Severity.WARNING]
         assert len(warnings) >= 1
 
+    def test_dup_sql_diff_filters_is_not_flagged(self, dup_sql_diff_filters_project):
+        """Measures sharing SQL but having different filters are distinct."""
+        issues = check_duplicate_sql(dup_sql_diff_filters_project)
+        warnings = [i for i in issues if i.severity == Severity.WARNING]
+        assert warnings == []
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════

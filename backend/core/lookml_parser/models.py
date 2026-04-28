@@ -17,6 +17,7 @@ class LookMLField(BaseModel):
     hidden: bool = False
     primary_key: bool = False          # NEW: tracks primary_key: yes
     tags: list[str] = Field(default_factory=list)
+    filters: Optional[str] = None
     source_file: str = ""
     line_number: int = 0
 

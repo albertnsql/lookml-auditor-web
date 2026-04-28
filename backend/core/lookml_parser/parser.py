@@ -152,6 +152,9 @@ def _parse_field(block_text: str, line_num: int, source_file: str) -> Optional[L
     else:
         tags = []
 
+    filters_match = re.search(r'filters\s*:\s*\[([^\]]+)\]', block_text)
+    filters_str = filters_match.group(1).strip() if filters_match else None
+
     return LookMLField(
         name=name,
         field_type=field_type,
@@ -162,6 +165,7 @@ def _parse_field(block_text: str, line_num: int, source_file: str) -> Optional[L
         hidden=_get_attr(block_text, "hidden") == "yes",
         primary_key=_get_attr(block_text, "primary_key") == "yes",
         tags=tags,
+        filters=filters_str,
         source_file=source_file,
         line_number=line_num,
     )

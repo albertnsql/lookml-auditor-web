@@ -346,6 +346,7 @@ def _field(
     hidden: bool = False,
     data_type: str | None = None,
     tags: list[str] | None = None,
+    filters: str | None = None,
     source_file: str = "test.view.lkml",
     line_number: int = 1,
 ) -> LookMLField:
@@ -359,6 +360,7 @@ def _field(
         hidden=hidden,
         data_type=data_type,
         tags=tags or [],
+        filters=filters,
         source_file=source_file,
         line_number=line_number,
     )
@@ -593,6 +595,17 @@ def dup_sql_project() -> LookMLProject:
         _field("id", primary_key=True, sql="${TABLE}.id", label="ID", description="ID"),
         _field("status", sql="${TABLE}.status", label="Status", description="Status"),
         _field("state",  sql="${TABLE}.status", label="State",  description="State alias"),
+    ])
+    return _project(views=[view])
+
+
+@pytest.fixture
+def dup_sql_diff_filters_project() -> LookMLProject:
+    """View where two measures share identical SQL but have different filters → No issue."""
+    view = _view("dup_sql_filters", fields=[
+        _field("id", primary_key=True, sql="${TABLE}.id", label="ID", description="ID"),
+        _field("customers_npc", field_type="measure", sql="${TABLE}.customers", filters='[org: "NPC"]', label="Customers NPC"),
+        _field("customers_npl", field_type="measure", sql="${TABLE}.customers", filters='[org: "NPL"]', label="Customers NPL"),
     ])
     return _project(views=[view])
 

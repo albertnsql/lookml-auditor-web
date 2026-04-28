@@ -33,17 +33,18 @@ def check_duplicate_sql(project: LookMLProject) -> list[Issue]:
     SKIP = {"${table}", "1", "true", "false", "null", ""}
 
     for view in project.views:
-        # Map: normalised SQL → list of LookMLField objects
-        sql_to_fields: dict[str, list[LookMLField]] = defaultdict(list)
+        # Map: (normalised SQL, filters) → list of LookMLField objects
+        sql_to_fields: dict[tuple[str, str | None], list[LookMLField]] = defaultdict(list)
         for field in view.fields:
             if not field.sql or field.field_type not in ("dimension", "dimension_group", "measure"):
                 continue
             norm = _normalise_sql(field.sql)
             if len(norm) < 5 or norm in SKIP:
                 continue
-            sql_to_fields[norm].append(field)
+            filt = field.filters.strip() if getattr(field, 'filters', None) else None
+            sql_to_fields[(norm, filt)].append(field)
 
-        for norm_sql, fields in sql_to_fields.items():
+        for (norm_sql, filt), fields in sql_to_fields.items():
             if len(fields) < 2:
                 continue
 
@@ -102,7 +103,7 @@ def check_duplicate_sql(project: LookMLProject) -> list[Issue]:
                     category=IssueCategory.DUPLICATE,
                     severity=Severity.WARNING,
                     message=(
-                        f"Duplicate SQL in view '{view.name}': {detail_str} share identical SQL"
+                        f"Duplicate SQL in view '{view.name}': {detail_str} share identical SQL. [DEBUG filt={filt}]"
                     ),
                     object_type="field",
                     object_name=f"{view.name}.*",
