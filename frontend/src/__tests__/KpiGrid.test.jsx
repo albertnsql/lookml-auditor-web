@@ -39,10 +39,11 @@ const MOCK_EXPLORE = (overrides = {}) => ({
 const MOCK_RESULT = {
   health_score: 88,
   category_scores: {
-    broken_reference: 100,
-    duplicate_def:    95,
-    join_integrity:   90,
-    field_quality:    80,
+    broken_reference:      100,
+    duplicate_view_source:  95,
+    duplicate_field_sql:    95,
+    join_integrity:          90,
+    field_quality:           80,
   },
   views: [MOCK_VIEW()],
   explores: [MOCK_EXPLORE()],

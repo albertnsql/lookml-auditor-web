@@ -14,19 +14,21 @@ export default function OverviewTab({ result }) {
   const inf = (bySev['info']    || []).length;
 
   const catRows = [
-    { label: 'Field Quality',        count: (byCat['Field Quality']        || []).length, color: 'var(--success)' },
-    { label: 'Duplicate Definition', count: (byCat['Duplicate Definition'] || byCat['Duplicate Def'] || []).length, color: 'var(--warning)' },
-    { label: 'Join Integrity',       count: (byCat['Join Integrity']       || []).length, color: 'var(--error)' },
-    { label: 'Broken Reference',     count: (byCat['Broken Reference']     || []).length, color: 'var(--info)' },
+    { label: 'Field Quality',          count: (byCat['Field Quality']          || []).length, color: 'var(--success)' },
+    { label: 'Duplicate View Source',  count: (byCat['Duplicate View Source']  || []).length, color: '#F59E0B' },
+    { label: 'Duplicate Field SQL',    count: (byCat['Duplicate Field SQL']    || []).length, color: 'var(--warning)' },
+    { label: 'Join Integrity',         count: (byCat['Join Integrity']         || []).length, color: 'var(--error)' },
+    { label: 'Broken Reference',       count: (byCat['Broken Reference']       || []).length, color: 'var(--info)' },
   ].sort((a, b) => b.count - a.count);
 
   const maxCat = Math.max(...catRows.map(r => r.count), 1);
 
   const catScores = [
-    { label: 'Broken Reference', score: category_scores?.broken_reference ?? 0 },
-    { label: 'Duplicate Def',    score: category_scores?.duplicate_def    ?? 0 },
-    { label: 'Join Integrity',   score: category_scores?.join_integrity   ?? 0 },
-    { label: 'Field Quality',    score: category_scores?.field_quality    ?? 0 },
+    { label: 'Broken Reference',      score: category_scores?.broken_reference      ?? 0 },
+    { label: 'Duplicate View Source', score: category_scores?.duplicate_view_source ?? 0 },
+    { label: 'Duplicate Field SQL',   score: category_scores?.duplicate_field_sql   ?? 0 },
+    { label: 'Join Integrity',        score: category_scores?.join_integrity        ?? 0 },
+    { label: 'Field Quality',         score: category_scores?.field_quality         ?? 0 },
   ];
 
   const topCat = [...catRows].sort((a, b) => b.count - a.count)[0];
@@ -59,7 +61,7 @@ export default function OverviewTab({ result }) {
                 ))}
               </div>
               <div style={{ borderTop: '1px solid var(--border)', marginTop: 'auto', paddingTop: '10px', textAlign: 'center', fontSize: '12px', color: 'var(--text-3)', fontFamily: 'Sora, sans-serif' }}>
-                4 categories · {total} total issues
+                5 categories · {total} total issues
               </div>
             </div>
           )}
@@ -118,7 +120,8 @@ export default function OverviewTab({ result }) {
       {/* ── Glossary bar ── */}
       <div className="card" style={{ padding: '14px 20px', background: 'var(--accent-light)', fontSize: '13px', color: 'var(--text-2)', lineHeight: 1.9, border: '1px solid var(--border)' }}>
         <strong style={{ color: 'var(--success)' }}>Broken Reference</strong> — Explores/joins pointing to missing views &nbsp;|&nbsp;{' '}
-        <strong style={{ color: 'var(--warning)' }}>Duplicate Definition</strong> — Same view/explore/field/SQL/table in 2+ places &nbsp;|&nbsp;{' '}
+        <strong style={{ color: 'var(--warning)' }}>Duplicate View Source</strong> — Two+ view files pointing at the same sql_table_name &nbsp;|&nbsp;{' '}
+        <strong style={{ color: '#F59E0B' }}>Duplicate Field SQL</strong> — Two fields in the same view sharing identical SQL expressions &nbsp;|&nbsp;{' '}
         <strong style={{ color: 'var(--error)' }}>Join Integrity</strong> — Missing sql_on · bad field refs · missing relationship &nbsp;|&nbsp;{' '}
         <strong style={{ color: 'var(--info)' }}>Field Quality</strong> — Missing PKs · orphaned views · missing labels/descriptions
       </div>
@@ -147,7 +150,8 @@ export default function OverviewTab({ result }) {
             <p style={{ marginBottom: '14px' }}><strong style={{ color: 'var(--text-1)' }}>Ratio-based scoring</strong> — each category is scored as the percentage of objects with no issues.</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '6px 16px', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', marginBottom: '16px', padding: '12px 16px', background: 'var(--surface-2)', borderRadius: '6px', border: '1px solid var(--border)' }}>
               <span style={{ color: 'var(--accent)' }}>Broken Reference (35%)</span><span>: issues / (explores + joins)</span>
-              <span style={{ color: 'var(--accent)' }}>Duplicate Def (25%)</span><span>: issues / (views + fields)</span>
+              <span style={{ color: 'var(--accent)' }}>Duplicate View Source (12.5%)</span><span>: view issues / views</span>
+              <span style={{ color: 'var(--accent)' }}>Duplicate Field SQL (12.5%)</span><span>: field SQL issues / fields</span>
               <span style={{ color: 'var(--accent)' }}>Join Integrity (25%)</span><span>: issues / (joins × 2)</span>
               <span style={{ color: 'var(--accent)' }}>Field Quality (15%)</span><span>: issues / (fields + views)</span>
             </div>
@@ -238,10 +242,11 @@ function ScorePill({ label, score }) {
 
   const { color } = scoreMeta(score);
   
-  const displayLabel = label === 'Broken Reference' ? 'BROKEN REFERENCE' :
-                       label === 'Duplicate Def'    ? 'DUPLICATE DEFINITION' :
-                       label === 'Join Integrity'   ? 'JOIN INTEGRITY' :
-                       label === 'Field Quality'    ? 'FIELD QUALITY' : label.toUpperCase();
+  const displayLabel = label === 'Broken Reference'     ? 'BROKEN REFERENCE' :
+                       label === 'Duplicate View Source' ? 'DUP VIEW SOURCE' :
+                       label === 'Duplicate Field SQL'   ? 'DUP FIELD SQL' :
+                       label === 'Join Integrity'        ? 'JOIN INTEGRITY' :
+                       label === 'Field Quality'         ? 'FIELD QUALITY' : label.toUpperCase();
 
   return (
     <div style={{ background: '#F5F3FF', border: '1px solid rgba(99,91,255,0.15)', borderRadius: '10px', padding: '12px 16px', display: 'flex', flexDirection: 'column' }}>

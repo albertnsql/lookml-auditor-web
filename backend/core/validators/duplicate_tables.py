@@ -25,7 +25,7 @@ def check_duplicate_table_refs(project: LookMLProject) -> list[Issue]:
         if len(views) > 1:
             view_names = ", ".join(f"'{v.name}'" for v in views)
             issues.append(Issue(
-                category=IssueCategory.DUPLICATE,
+                category=IssueCategory.DUPLICATE_VIEW_SOURCE,
                 severity=Severity.WARNING,
                 message=(
                     f"SQL table '{table_name}' is referenced by {len(views)} views: {view_names}"

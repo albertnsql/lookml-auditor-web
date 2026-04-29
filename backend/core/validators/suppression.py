@@ -33,16 +33,19 @@ from validators.issue import Issue, IssueCategory
 
 
 # Map friendly names → IssueCategory values
-_CATEGORY_ALIASES = {
-    "broken_reference":   IssueCategory.BROKEN_REFERENCE,
-    "broken":             IssueCategory.BROKEN_REFERENCE,
-    "duplicate":          IssueCategory.DUPLICATE,
-    "duplicate_definition": IssueCategory.DUPLICATE,
-    "join_integrity":     IssueCategory.JOIN_INTEGRITY,
-    "join":               IssueCategory.JOIN_INTEGRITY,
-    "field_quality":      IssueCategory.FIELD_QUALITY,
-    "field_documentation": IssueCategory.FIELD_QUALITY,
-    "quality":            IssueCategory.FIELD_QUALITY,
+_CATEGORY_ALIASES: dict[str, list] = {
+    "broken_reference":       [IssueCategory.BROKEN_REFERENCE],
+    "broken":                 [IssueCategory.BROKEN_REFERENCE],
+    # "duplicate" matches both new categories for backwards-compatible suppression rules
+    "duplicate":              [IssueCategory.DUPLICATE_VIEW_SOURCE, IssueCategory.DUPLICATE_FIELD_SQL],
+    "duplicate_definition":   [IssueCategory.DUPLICATE_VIEW_SOURCE, IssueCategory.DUPLICATE_FIELD_SQL],
+    "duplicate_view_source":  [IssueCategory.DUPLICATE_VIEW_SOURCE],
+    "duplicate_field_sql":    [IssueCategory.DUPLICATE_FIELD_SQL],
+    "join_integrity":         [IssueCategory.JOIN_INTEGRITY],
+    "join":                   [IssueCategory.JOIN_INTEGRITY],
+    "field_quality":          [IssueCategory.FIELD_QUALITY],
+    "field_documentation":    [IssueCategory.FIELD_QUALITY],
+    "quality":                [IssueCategory.FIELD_QUALITY],
 }
 
 
@@ -102,9 +105,9 @@ def apply_suppressions(issues: list[Issue], rules: dict,
     # Global category suppressions
     suppressed_cats: set[IssueCategory] = set()
     for name in (rules.get("suppress_checks") or []):
-        cat = _CATEGORY_ALIASES.get(name.lower().strip())
-        if cat:
-            suppressed_cats.add(cat)
+        cats = _CATEGORY_ALIASES.get(name.lower().strip())
+        if cats:
+            suppressed_cats.update(cats)
 
     # Per-object/file/pattern rules
     per_rules = rules.get("suppress") or []
@@ -119,8 +122,8 @@ def apply_suppressions(issues: list[Issue], rules: dict,
             check_name = rule.get("check", "*").lower()
             # Resolve check to category
             if check_name != "*":
-                rule_cat = _CATEGORY_ALIASES.get(check_name)
-                if rule_cat and rule_cat != issue.category:
+                rule_cats = _CATEGORY_ALIASES.get(check_name)
+                if rule_cats and issue.category not in rule_cats:
                     continue  # This rule targets a different category
 
             # Match by object name pattern

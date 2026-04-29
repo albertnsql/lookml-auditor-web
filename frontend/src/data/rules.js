@@ -73,20 +73,49 @@ export const RULES = [
 }`,
   },
   {
-    id: 'duplicate_view_definition',
-    title: 'Duplicate View Definition',
-    severity: 'error',
-    category: 'Duplicate Definition',
-    description: 'The same view name is defined in more than one .lkml file. Looker will throw a project-level error and none of your explores will load.',
-    badExample: `# file1.view.lkml
-view: customers { ... }
+    id: 'duplicate_view_source',
+    title: 'Duplicate View Source',
+    severity: 'warning',
+    category: 'Duplicate View Source',
+    description: 'Two view files reference the same sql_table_name. This creates confusion about which view to use and can cause unexpected query results.',
+    badExample: `# view_a.view.lkml
+view: orders_v1 {
+  sql_table_name: public.orders ;;
+}
 
-# file2.view.lkml  ← CONFLICT
-view: customers { ... }`,
-    goodExample: `# customers.view.lkml  ← Single source of truth
-view: customers {
-  sql_table_name: public.customers ;;
+# view_b.view.lkml  ← SAME TABLE!
+view: orders_v2 {
+  sql_table_name: public.orders ;;
+}`,
+    goodExample: `# Single canonical view per table:
+view: orders {
+  sql_table_name: public.orders ;;
   # ... all fields
+}`,
+  },
+  {
+    id: 'duplicate_field_sql',
+    title: 'Duplicate Field SQL',
+    severity: 'warning',
+    category: 'Duplicate Field SQL',
+    description: 'Two dimensions or measures within the same view share identical SQL expressions. One is likely redundant and should be removed.',
+    badExample: `view: orders {
+  dimension: revenue {
+    type: number
+    sql: \${TABLE}.revenue ;;
+  }
+  dimension: revenue_copy {  # ← redundant
+    type: number
+    sql: \${TABLE}.revenue ;;
+  }
+}`,
+    goodExample: `view: orders {
+  dimension: revenue {
+    type: number
+    label: "Revenue"
+    sql: \${TABLE}.revenue ;;
+  }
+  # Only one definition per SQL column
 }`,
   },
   {

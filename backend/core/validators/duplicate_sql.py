@@ -44,17 +44,17 @@ def check_duplicate_sql(project: LookMLProject) -> list[Issue]:
             if getattr(field, 'primary_key', False):
                 continue
 
-            # 2. Skip if hidden: often used for intermediate calculations or internal logic
+            # 2. Skip if hidden: often used for internal logic
             if getattr(field, 'hidden', False):
                 continue
-
-            # 3. Skip if it belongs to a dimension_group: timeframe fields share base SQL by design
-            # (Note: already handled by only allowing "dimension" and "measure" above)
 
             norm = _normalise_sql(field.sql)
             if len(norm) < 5 or norm in SKIP:
                 continue
 
+            # Fields with identical SQL but different format strings are intentional 
+            # (same data displayed differently). Including them in the group key 
+            # naturally excludes them from being flagged together.
             filt = field.filters.strip() if getattr(field, 'filters', None) else None
             html = field.html.strip() if getattr(field, 'html', None) else None
             v_format = field.value_format.strip() if getattr(field, 'value_format', None) else None
@@ -77,31 +77,36 @@ def check_duplicate_sql(project: LookMLProject) -> list[Issue]:
                 if len(bucket) < 2:
                     continue  # Only one field of this type in this SQL group — not a duplicate
 
-                bucket_names = [f.name for f in bucket]
-                field_details = []
-                for f in bucket:
-                    detail = f"'{f.name}' ({_field_kind(f)})"
-                    vf = getattr(f, 'value_format', None) or ""
-                    if vf:
-                        detail += f" [format: {vf}]"
-                    field_details.append(detail)
-                
-                detail_str = ", ".join(field_details)
+                if len(bucket) == 2:
+                    f1, f2 = bucket
+                    msg = f"Duplicate SQL in view '{view.name}': '{f1.name}' ({_field_kind(f1)}) and '{f2.name}' ({_field_kind(f2)}) share identical SQL."
+                else:
+                    f1, f2, f3 = bucket[:3]
+                    more_count = len(bucket) - 3
+                    
+                    # Majority type for "and N more" case
+                    all_types = [f.field_type for f in bucket]
+                    if all(t == "measure" for t in all_types):
+                        m_type = "measures"
+                    elif all(t == "dimension" for t in all_types):
+                        m_type = "dimensions"
+                    else:
+                        m_type = "fields"
+                    
+                    msg = f"Duplicate SQL in view '{view.name}': '{f1.name}', '{f2.name}', '{f3.name}' and {more_count} more ({m_type}) share identical SQL."
 
                 issues.append(Issue(
-                    category=IssueCategory.DUPLICATE,
+                    category=IssueCategory.DUPLICATE_FIELD_SQL,
                     severity=Severity.WARNING,
-                    message=(
-                        f"Duplicate SQL in view '{view.name}': {detail_str} share identical SQL."
-                    ),
+                    message=msg,
                     object_type="field",
                     object_name=f"{view.name}.*",
                     source_file=view.source_file,
                     line_number=view.line_number,
                     suggestion=(
-                        f"Fields {', '.join(repr(n) for n in bucket_names)} in view '{view.name}' "
-                        "share the same SQL expression. If intentional (e.g. different value formats), "
-                        "add a comment to document the intent. Otherwise remove the redundant definition."
+                        f"Fields '{bucket[0].name}' and '{bucket[1].name}' in view '{view.name}' "
+                        "share the same SQL expression. If intentional, add a comment to document the intent. "
+                        "Otherwise remove the redundant definition."
                     ),
                 ))
 

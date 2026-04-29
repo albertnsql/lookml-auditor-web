@@ -15,28 +15,44 @@ export default function FileViewerTab({ result, initialFile, initialLine }) {
 
   // Single files fetch — handles both normal open and navigation from Issues tab.
   // Runs once on mount; initialFile/initialLine are stable (set before tab switch).
+  // Handle initial file navigation and prop changes
   useEffect(() => {
-    api.getFiles().then(d => {
-      const fileList = d.files || [];
-      setFiles(fileList);
-
+    const handleNavigation = (fileList) => {
       if (initialFile && fileList.length) {
         const norm = (p) => (p || '').replace(/\\/g, '/').toLowerCase();
         const target = norm(initialFile);
-        // Match: exact path → last 2 segments → filename only
+        
         const matched =
           fileList.find(f => norm(f.path) === target) ||
           fileList.find(f => norm(f.path).endsWith(target.split('/').slice(-2).join('/'))) ||
           fileList.find(f => norm(f.path).endsWith(target.split('/').pop()));
 
-        setSelPath(matched ? matched.path : (fileList[0]?.path || ''));
-        if (initialLine) setHighlightLine(Number(initialLine));
-      } else if (fileList.length) {
+        if (matched) {
+          setSelPath(matched.path);
+        } else {
+          setSelPath(fileList[0].path);
+        }
+        
+        if (initialLine) {
+          setHighlightLine(Number(initialLine));
+        }
+      } else if (fileList.length && !selPath) {
         setSelPath(fileList[0].path);
       }
-    }).catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    };
+
+    if (files.length > 0) {
+      handleNavigation(files);
+    } else {
+      setLoading(true);
+      api.getFiles().then(d => {
+        const fileList = d.files || [];
+        setFiles(fileList);
+        handleNavigation(fileList);
+      }).catch(() => {})
+      .finally(() => setLoading(false));
+    }
+  }, [initialFile, initialLine]); // Re-run when navigation props change
 
   // Load file content whenever the selected path changes
   useEffect(() => {

@@ -10,6 +10,9 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
   const setFilters = onFilterChange;
 
   const [selectedFile, setSelectedFile] = useState(null);
+  const [isBlastRadiusOpen, setIsBlastRadiusOpen] = useState(false);
+  const [isDeadCodeOpen, setIsDeadCodeOpen] = useState(false);
+  const [drawerSearch, setDrawerSearch] = useState('');
 
   // Sync selectedFile with filters.file
   useEffect(() => {
@@ -39,24 +42,58 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
   }, [auditData]);
 
   const blastRadius = useMemo(() => {
-    const brokenRefs = auditData.issues.filter(i => i.category === 'Broken Reference');
-    const joinIssues = auditData.issues.filter(i => i.category === 'Join Integrity');
-    const affectedExplores = [...new Set([
-      ...brokenRefs.map(i => i.explore || i.object_name),
-      ...joinIssues.map(i => i.explore || i.object_name),
-    ])].filter(Boolean);
+    const issues = auditData.issues.filter(i => 
+      i.category === 'Broken Reference' || 
+      i.category === 'Join Integrity' ||
+      i.category === 'Duplicate View Source'
+    );
+    
+    const affectedExploresMap = {};
+    
+    issues.forEach(issue => {
+      const exploreName = issue.explore || (issue.object_type === 'explore' ? issue.object_name : null);
+      if (exploreName) {
+        if (!affectedExploresMap[exploreName]) {
+          affectedExploresMap[exploreName] = [];
+        }
+        affectedExploresMap[exploreName].push(issue);
+      }
+    });
+
+    const affectedExplores = Object.keys(affectedExploresMap).map(name => ({
+      name,
+      issues: affectedExploresMap[name],
+      hasCritical: affectedExploresMap[name].some(i => i.severity === 'error')
+    })).sort((a, b) => (b.hasCritical ? 1 : 0) - (a.hasCritical ? 1 : 0));
+
     return {
       count: affectedExplores.length,
       explores: affectedExplores,
-      hasCritical: brokenRefs.length > 0,
+      hasCritical: affectedExplores.some(e => e.hasCritical),
     };
   }, [auditData]);
 
   const deadCode = useMemo(() => {
-    // Assuming summary logic here or derived from auditData
-    const allRefs = new Set(auditData.explores.flatMap(e => [e.base_view, ...e.joins.map(j => j.resolved_view)]));
-    const orphanViews = auditData.views.filter(v => !allRefs.has(v.name));
-    return { count: orphanViews.length, views: orphanViews.map(v => v.name) };
+    const orphanIssues = auditData.issues.filter(i => i.message?.toLowerCase().includes('orphaned view'));
+    
+    const views = orphanIssues.map(issue => {
+      const viewData = auditData.views.find(v => v.name === issue.object_name) || {};
+      const viewIssues = auditData.issues.filter(i => i.object_name === issue.object_name && i !== issue);
+      
+      return {
+        name: issue.object_name,
+        path: issue.source_file,
+        issueCount: viewIssues.length,
+        // Confidence: Green if zero other issues, Amber if it has other problems
+        confidence: viewIssues.length === 0 ? 'Safe to delete' : 'Review first',
+        issue: issue
+      };
+    });
+
+    return { 
+      count: views.length, 
+      views: views 
+    };
   }, [auditData]);
 
   const heatmapFiles = useMemo(() => {
@@ -270,11 +307,13 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
         </div>
 
         {/* Card 2: Blast Radius */}
-        <div style={{
+        <div 
+          onClick={() => { setIsBlastRadiusOpen(true); setDrawerSearch(''); }}
+          style={{
           minHeight: '150px', background: '#FFFFFF', borderRadius: '12px', padding: '14px 18px',
           border: '1px solid #E2DFF5', borderLeft: '4px solid #DC2626',
-          display: 'flex', flexDirection: 'column', transition: '150ms ease'
-        }}>
+          display: 'flex', flexDirection: 'column', transition: '150ms ease', cursor: 'pointer'
+        }} onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(220,38,38,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"/>
@@ -298,15 +337,15 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
 
           <div style={{ display: 'flex', flexDirection: 'column', marginTop: '8px', marginBottom: '10px' }}>
             {blastRadius.explores.slice(0, 2).map((e, i) => (
-              <div key={e} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid rgba(226,223,245,0.4)' }}>
-                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: '#1E1B4B', fontWeight: 500 }}>{e}</span>
+              <div key={e.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid rgba(226,223,245,0.4)' }}>
+                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '13px', color: '#1E1B4B', fontWeight: 500 }}>{e.name}</span>
                 <span style={{
-                  background: i === 0 && blastRadius.hasCritical ? '#FEF2F2' : '#FFFBEB',
-                  color: i === 0 && blastRadius.hasCritical ? '#DC2626' : '#D97706',
-                  border: `1px solid ${i === 0 && blastRadius.hasCritical ? '#FECACA' : '#FDE68A'}`,
+                  background: e.hasCritical ? '#FEF2F2' : '#FFFBEB',
+                  color: e.hasCritical ? '#DC2626' : '#D97706',
+                  border: `1px solid ${e.hasCritical ? '#FECACA' : '#FDE68A'}`,
                   padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, fontFamily: 'Sora, sans-serif'
                 }}>
-                  {i === 0 && blastRadius.hasCritical ? 'ERROR' : 'WARNING'}
+                  {e.hasCritical ? 'ERROR' : 'WARNING'}
                 </span>
               </div>
             ))}
@@ -326,11 +365,13 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
         </div>
 
         {/* Card 3: Dead Code */}
-        <div style={{
+        <div 
+          onClick={() => { setIsDeadCodeOpen(true); setDrawerSearch(''); }}
+          style={{
           minHeight: '150px', background: '#FFFFFF', borderRadius: '12px', padding: '14px 18px',
           border: '1px solid #E2DFF5', borderLeft: '4px solid #09A55A',
-          display: 'flex', flexDirection: 'column', transition: '150ms ease'
-        }}>
+          display: 'flex', flexDirection: 'column', transition: '150ms ease', cursor: 'pointer'
+        }} onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(9,165,90,0.08)'} onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#09A55A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/>
@@ -354,11 +395,11 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px', marginBottom: '10px' }}>
             {deadCode.views.slice(0, 3).map(v => (
-              <span key={v} style={{
+              <span key={v.name} style={{
                 fontFamily: 'Inter, sans-serif', fontSize: '12px', background: '#F3F4F6',
                 border: '1px solid #E2DFF5', borderRadius: '6px', padding: '3px 8px', color: '#1E1B4B'
               }}>
-                {v}
+                {v.name}
               </span>
             ))}
             {deadCode.views.length > 3 && (
@@ -453,7 +494,8 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
           >
             <option value="all">All Categories</option>
             <option value="Broken Reference">Broken Reference</option>
-            <option value="Duplicate Definition">Duplicate Definition</option>
+            <option value="Duplicate View Source">Duplicate View Source</option>
+            <option value="Duplicate Field SQL">Duplicate Field SQL</option>
             <option value="Join Integrity">Join Integrity</option>
             <option value="Field Quality">Field Quality</option>
           </select>
@@ -585,6 +627,45 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
           border-color: transparent !important;
         }
       `}} />
+
+      {/* ── Drawers ── */}
+      <InsightDrawer
+        isOpen={isBlastRadiusOpen}
+        onClose={() => setIsBlastRadiusOpen(false)}
+        title="Explores at Risk"
+        subtitle="Click any explore to view in Issues tab"
+        count={blastRadius.count}
+        searchTerm={drawerSearch}
+        onSearchChange={setDrawerSearch}
+      >
+        <BlastRadiusList 
+          explores={blastRadius.explores} 
+          searchTerm={drawerSearch} 
+          repoName={auditData.project?.name}
+          onNavigateToIssues={(exp) => {
+            setIsBlastRadiusOpen(false);
+            setFilters(f => ({ ...f, search: exp }));
+            document.getElementById('issues-table')?.scrollIntoView({ behavior: 'smooth' });
+          }}
+        />
+      </InsightDrawer>
+
+      <InsightDrawer
+        isOpen={isDeadCodeOpen}
+        onClose={() => setIsDeadCodeOpen(false)}
+        title="Views to Prune"
+        subtitle="These views have no explore or extends references"
+        count={deadCode.count}
+        searchTerm={drawerSearch}
+        onSearchChange={setDrawerSearch}
+      >
+        <DeadCodeList 
+          views={deadCode.views} 
+          searchTerm={drawerSearch} 
+          repoName={auditData.project?.name}
+          onOpenFileViewer={onOpenInFileViewer}
+        />
+      </InsightDrawer>
     </div>
   );
 }
@@ -735,7 +816,9 @@ function TopViolationRules({ rules, totalFixHours }) {
 
 function getRuleColor(cat) {
   const c = cat?.toLowerCase();
-  if (c === 'field quality' || c === 'duplicate definition') return '#D97706';
+  if (c === 'field quality') return '#D97706';
+  if (c === 'duplicate view source') return '#F59E0B';   // amber for view-level
+  if (c === 'duplicate field sql')   return '#D97706';   // orange for field-level
   if (c === 'broken reference' || c === 'join integrity') return '#DC2626';
   if (c === 'orphan view') return '#2563EB';
   return '#6B7280';
@@ -830,7 +913,7 @@ function IssueRow({ issue, isAlt, isExpanded, onToggle, onOpenInFileViewer }) {
           </span>
         </div>
         <div style={{ fontSize: '13px', color: 'var(--text-1)', fontFamily: 'Sora, sans-serif', fontWeight: 500 }}>
-          {issue.category === 'Duplicate Def' ? 'Duplicate Definition' : issue.category}
+          {issue.category}
         </div>
         <div style={{ fontSize: '13px', color: 'var(--accent)', fontFamily: "'Fira Code', monospace", wordBreak: 'break-all' }}>
           {objName}
@@ -969,7 +1052,10 @@ function getIssueFixSnippet(issue) {
   // Generate issue-specific snippets based on category
   if (cat.includes('duplicate')) {
     const field = issue.field || obj || 'my_field';
-    return `# Remove or rename the duplicate definition\n# in ${file}.lkml\n\ndimension: ${field} {\n  # Keep only ONE definition of this field\n  # Remove the duplicate from the other view\n  sql: \${TABLE}.${field} ;;\n}`;
+    if (cat.includes('view source')) {
+      return `# Fix duplicate view source in ${file}.lkml\n\n# Two views reference the same sql_table_name.\n# Remove the duplicate reference or rename one view.\nview: ${file} {\n  sql_table_name: schema.table_name ;;\n}`;
+    }
+    return `# Remove or rename the duplicate field\n# in ${file}.lkml\n\ndimension: ${field} {\n  # Keep only ONE definition of this field\n  # Remove the duplicate from the view\n  sql: \${TABLE}.${field} ;;\n}`;
   }
 
   if (cat.includes('broken reference') || cat.includes('broken ref')) {
@@ -1104,4 +1190,290 @@ function getObjectName(i) {
   if (i.model) return i.model;
   if (i.object_name) return i.object_name;
   return 'project';
+}
+
+function getRelativePath(fullPath, repoName) {
+  if (!fullPath) return '';
+  if (!repoName) return fullPath.replace(/\\/g, '/');
+  
+  // Normalize everything to forward slashes first
+  const normalized = fullPath.replace(/\\/g, '/');
+  const parts = normalized.split('/');
+  
+  // Try to find the repo folder. Sometimes it might be exact, sometimes with a prefix.
+  const repoIdx = parts.findIndex(p => p === repoName || p.includes(repoName));
+  
+  if (repoIdx !== -1) {
+    return parts.slice(repoIdx + 1).join('/');
+  }
+  
+  // Fallback: if we can't find repo name, just return the filename
+  return parts[parts.length - 1];
+}
+
+// ── Drawer Components ──────────────────────────────────────────
+
+function InsightDrawer({ isOpen, onClose, title, subtitle, count, searchTerm, onSearchChange, children }) {
+  if (!isOpen) return null;
+  
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
+      <div 
+        onClick={onClose}
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(2px)' }} 
+      />
+      <div style={{ 
+        width: '100%', maxWidth: '440px', height: '100%', background: '#f8f7ff', 
+        position: 'relative', zIndex: 1001, display: 'flex', flexDirection: 'column',
+        boxShadow: '-4px 0 24px rgba(0,0,0,0.1)',
+        animation: 'slideInRight 300ms ease-out'
+      }}>
+        {/* Header */}
+        <div style={{ padding: '24px', borderBottom: '1px solid #E2DFF5', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FFF' }}>
+          <div>
+            <h2 style={{ margin: 0, fontFamily: 'Sora, sans-serif', fontSize: '18px', fontWeight: 700, color: '#1E1B4B' }}>
+              {count} {title}
+            </h2>
+            {subtitle && (
+              <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px', fontFamily: 'Inter, sans-serif' }}>
+                {subtitle}
+              </div>
+            )}
+          </div>
+          <button onClick={onClose} style={{ background: '#F3F4F6', border: 'none', cursor: 'pointer', color: '#9CA3AF', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', transition: '150ms' }} onMouseEnter={e => e.currentTarget.style.background = '#E5E7EB'} onMouseLeave={e => e.currentTarget.style.background = '#F3F4F6'}>✕</button>
+        </div>
+
+        {/* Search */}
+        <div style={{ padding: '16px 24px', borderBottom: '1px solid #E2DFF5', background: '#FFF' }}>
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="Search explores or files..."
+              value={searchTerm}
+              onChange={e => onSearchChange(e.target.value)}
+              style={{
+                width: '100%', padding: '10px 12px 10px 36px', borderRadius: '8px',
+                border: '1px solid #e5e7eb', outline: 'none', font: '14px Inter',
+                transition: 'border-color 150ms', background: '#f9fafb'
+              }}
+              onFocus={e => e.currentTarget.style.borderColor = '#635BFF'}
+              onBlur={e => e.currentTarget.style.borderColor = '#e5e7eb'}
+            />
+            <svg style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </div>
+        </div>
+
+        {/* List */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 24px' }}>
+          {children}
+        </div>
+      </div>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes slideInRight {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+      `}} />
+    </div>
+  );
+}
+
+function BlastRadiusList({ explores, searchTerm, repoName, onNavigateToIssues }) {
+  const filtered = explores.filter(e => 
+    e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    e.issues.some(i => (i.source_file || '').toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  if (filtered.length === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+        <div style={{ width: '48px', height: '48px', background: '#F3F4F6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <div style={{ font: '600 14px Sora', color: '#1E1B4B' }}>No explores match your search</div>
+        <div style={{ font: '13px Inter', color: '#6B7280', marginTop: '4px' }}>Try a different keyword</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {filtered.map(exp => {
+        const primaryIssue = exp.issues[0] || {};
+        const allFiles = [...new Set(exp.issues.map(i => i.source_file).filter(Boolean))];
+        const displayFiles = allFiles.slice(0, 3);
+        const moreCount = allFiles.length - 3;
+
+        return (
+          <div 
+            key={exp.name} 
+            style={{ 
+              background: '#FFFFFF', border: '1px solid #e5e7eb', borderRadius: '10px', 
+              padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.06)', transition: '150ms ease'
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = '#c4b5fd'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#e5e7eb'}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ font: '700 15px Sora', color: '#1E1B4B', wordBreak: 'break-word' }}>{exp.name}</div>
+                <div style={{ font: '500 11px Inter', color: '#6B7280', marginTop: '2px' }}>
+                  {primaryIssue.category || 'Multiple issues'}
+                </div>
+              </div>
+              <div style={{ 
+                background: exp.hasCritical ? '#FEF2F2' : '#FFFBEB', 
+                color: exp.hasCritical ? '#DC2626' : '#D97706',
+                border: `1px solid ${exp.hasCritical ? '#FECACA' : '#FDE68A'}`,
+                padding: '3px 8px', borderRadius: '4px', font: '700 10px Sora',
+                flexShrink: 0
+              }}>
+                {exp.hasCritical ? 'ERROR' : 'WARNING'}
+              </div>
+            </div>
+
+            {/* Files */}
+            <div>
+              <div style={{ font: '600 10px Sora', color: '#9CA3AF', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '6px' }}>
+                Defined in:
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {displayFiles.map(f => (
+                  <span key={f} title={getRelativePath(f, repoName)} style={{ 
+                    background: '#ede9fe', color: '#5b21b6', borderRadius: '12px', 
+                    padding: '3px 10px', font: '500 11px Inter', whiteSpace: 'nowrap',
+                    maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis',
+                    boxSizing: 'border-box'
+                  }}>
+                    {getRelativePath(f, repoName)}
+                  </span>
+                ))}
+                {moreCount > 0 && (
+                  <span style={{ 
+                    background: '#F3F4F6', color: '#6B7280', borderRadius: '12px', 
+                    padding: '3px 10px', font: '500 11px Inter'
+                  }}>
+                    +{moreCount} more
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+              <button 
+                onClick={() => onNavigateToIssues(exp.name)}
+                style={{ 
+                  background: 'none', border: 'none', color: '#5b4eff', 
+                  font: '600 12px Sora', cursor: 'pointer', padding: 0,
+                  display: 'flex', alignItems: 'center', gap: '4px'
+                }}
+                onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+              >
+                View in Issues →
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DeadCodeList({ views, searchTerm, repoName, onOpenFileViewer }) {
+  const filtered = views.filter(v => 
+    v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (v.path || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (filtered.length === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+        <div style={{ width: '48px', height: '48px', background: '#F3F4F6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <div style={{ font: '600 14px Sora', color: '#1E1B4B' }}>No views match your search</div>
+        <div style={{ font: '13px Inter', color: '#6B7280', marginTop: '4px' }}>Try a different keyword</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {filtered.map(view => (
+        <div 
+          key={view.name} 
+          style={{ 
+            background: '#FFFFFF', border: '1px solid #e5e7eb', borderRadius: '10px', 
+            padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)', transition: '150ms ease'
+          }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = '#c4b5fd'}
+          onMouseLeave={e => e.currentTarget.style.borderColor = '#e5e7eb'}
+        >
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ font: '700 15px Sora', color: '#1E1B4B', wordBreak: 'break-word' }}>{view.name}</div>
+              <div style={{ font: '500 11px Inter', color: '#6B7280', marginTop: '2px' }}>Orphan View</div>
+            </div>
+            <div style={{ 
+              background: view.confidence === 'Safe to delete' ? '#dcfce7' : '#FFFBEB', 
+              color: view.confidence === 'Safe to delete' ? '#16a34a' : '#D97706',
+              border: `1px solid ${view.confidence === 'Safe to delete' ? '#BBF7D0' : '#FDE68A'}`,
+              padding: '3px 8px', borderRadius: '4px', font: '700 10px Sora',
+              flexShrink: 0
+            }}>
+              {view.confidence.toUpperCase()}
+            </div>
+          </div>
+
+          {/* File */}
+          <div>
+            <div style={{ font: '600 10px Sora', color: '#9CA3AF', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '6px' }}>
+              File:
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              <span title={getRelativePath(view.path, repoName)} style={{ 
+                background: '#ede9fe', color: '#5b21b6', borderRadius: '12px', 
+                padding: '3px 10px', font: '500 11px Inter', whiteSpace: 'nowrap',
+                maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis',
+                boxSizing: 'border-box'
+              }}>
+                {getRelativePath(view.path, repoName)}
+              </span>
+            </div>
+          </div>
+
+          {/* Issues Count */}
+          {view.issueCount > 0 && (
+            <div style={{ font: '500 11px Inter', color: '#6B7280' }}>
+              {view.issueCount} issues inside this view
+            </div>
+          )}
+
+          {/* Footer */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+            <button 
+              onClick={() => onOpenFileViewer(view.path, 1)}
+              style={{ 
+                background: 'none', border: 'none', color: '#5b4eff', 
+                font: '600 12px Sora', cursor: 'pointer', padding: 0,
+                display: 'flex', alignItems: 'center', gap: '4px'
+              }}
+              onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+              onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+            >
+              Open in File Viewer →
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }

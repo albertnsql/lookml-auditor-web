@@ -64,7 +64,7 @@ def check_duplicates(project: LookMLProject) -> list[Issue]:
         unique_filenames = {f.replace("\\", "/").split("/")[-1] for f in files}
 
         issues.append(Issue(
-            category=IssueCategory.DUPLICATE,
+            category=IssueCategory.DUPLICATE_VIEW_SOURCE,
             severity=severity,
             message=(
                 f"View '{view_name}' is defined {len(unique_paths)} times "
@@ -97,7 +97,7 @@ def check_duplicates(project: LookMLProject) -> list[Issue]:
         same_file  = len(unique_paths) == 1
         severity   = Severity.ERROR if same_file else Severity.WARNING
         issues.append(Issue(
-            category=IssueCategory.DUPLICATE,
+            category=IssueCategory.DUPLICATE_VIEW_SOURCE,
             severity=severity,
             message=(
                 f"Explore '{exp_name}' is defined {len(unique_paths)} times "
@@ -146,7 +146,7 @@ def check_duplicates(project: LookMLProject) -> list[Issue]:
                 # dimension_group + plain dimension with same base name is a known
                 # LookML pattern — the group generates sub-fields like _raw, _date etc.
                 issues.append(Issue(
-                    category=IssueCategory.DUPLICATE,
+                    category=IssueCategory.DUPLICATE_VIEW_SOURCE,
                     severity=Severity.WARNING,
                     message=(
                         f"Field '{field_name}' in view '{view.name}' has both a dimension "
@@ -165,7 +165,7 @@ def check_duplicates(project: LookMLProject) -> list[Issue]:
             else:
                 # True duplicate — same name, same type
                 issues.append(Issue(
-                    category=IssueCategory.DUPLICATE,
+                    category=IssueCategory.DUPLICATE_VIEW_SOURCE,
                     severity=Severity.ERROR,
                     message=(
                         f"Field '{field_name}' is defined {len(types)} times "

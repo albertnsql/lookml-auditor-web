@@ -165,7 +165,7 @@ class TestDuplicateTableRefs:
     def test_same_sql_table_flagged(self, dup_table_refs_project):
         issues = check_duplicate_table_refs(dup_table_refs_project)
         assert len(issues) >= 1
-        assert all(i.category == IssueCategory.DUPLICATE for i in issues)
+        assert all(i.category == IssueCategory.DUPLICATE_VIEW_SOURCE for i in issues)
 
     def test_case_insensitive_table_comparison(self, make_view, make_project):
         v1 = make_view("a", sql_table="Public.Orders")
@@ -557,7 +557,8 @@ class TestCategoryScores:
         issues = run_all_checks(clean_project)
         scores = compute_category_scores(issues, clean_project)
         assert "Broken Reference" in scores
-        assert "Duplicate Def" in scores
+        assert "Duplicate View Source" in scores
+        assert "Duplicate Field SQL" in scores
         assert "Join Integrity" in scores
         assert "Field Quality" in scores
 

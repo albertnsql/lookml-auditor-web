@@ -31,6 +31,7 @@ class LookMLView(BaseModel):
     derived_table_sql: Optional[str] = None
     extends: list[str] = Field(default_factory=list)
     fields: list[LookMLField] = Field(default_factory=list)
+    extension_required: bool = False
     source_file: str = ""
     line_number: int = 0
 

@@ -154,12 +154,12 @@ class TestApplySuppressions:
     def test_exact_object_match(self):
         issue = _make_issue(object_name="orders")
         rules = {"suppress": [{"check": "duplicate", "object": "orders"}]}
-        issue2 = _make_issue(category=IssueCategory.DUPLICATE, object_name="orders")
+        issue2 = _make_issue(category=IssueCategory.DUPLICATE_VIEW_SOURCE, object_name="orders")
         kept, suppressed = apply_suppressions([issue2], rules)
         assert suppressed == 1
 
     def test_exact_object_case_insensitive(self):
-        issue = _make_issue(category=IssueCategory.DUPLICATE, object_name="Orders")
+        issue = _make_issue(category=IssueCategory.DUPLICATE_VIEW_SOURCE, object_name="Orders")
         rules = {"suppress": [{"check": "duplicate", "object": "orders"}]}
         kept, suppressed = apply_suppressions([issue], rules)
         assert suppressed == 1
@@ -198,7 +198,7 @@ class TestApplySuppressions:
         issues = [
             _make_issue(category=IssueCategory.JOIN_INTEGRITY),
             _make_issue(category=IssueCategory.BROKEN_REFERENCE),
-            _make_issue(category=IssueCategory.DUPLICATE),
+            _make_issue(category=IssueCategory.DUPLICATE_VIEW_SOURCE),
         ]
         rules = {"suppress": [{"check": "*", "pattern": "my_explore"}]}
         kept, suppressed = apply_suppressions(issues, rules)
@@ -208,7 +208,7 @@ class TestApplySuppressions:
     def test_multiple_rules_combined(self):
         join_issue = _make_issue(category=IssueCategory.JOIN_INTEGRITY, object_name="legacy_x")
         ref_issue  = _make_issue(category=IssueCategory.BROKEN_REFERENCE, object_name="ghost")
-        dup_issue  = _make_issue(category=IssueCategory.DUPLICATE, object_name="other")
+        dup_issue  = _make_issue(category=IssueCategory.DUPLICATE_VIEW_SOURCE, object_name="other")
         rules = {
             "suppress": [
                 {"check": "join_integrity", "pattern": "legacy_*"},

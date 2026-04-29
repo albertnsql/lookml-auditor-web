@@ -60,7 +60,8 @@ export default function KpiGrid({ result, filters, onKpiClick }) {
 
   const miniScores = [
     { label: 'Broken Ref', score: category_scores?.broken_reference ?? 0 },
-    { label: 'Dup Def',    score: category_scores?.duplicate_def    ?? 0 },
+    { label: 'Dup View Src', score: category_scores?.duplicate_view_source ?? 0 },
+    { label: 'Dup Field SQL', score: category_scores?.duplicate_field_sql   ?? 0 },
     { label: 'Join Int',   score: category_scores?.join_integrity   ?? 0 },
     { label: 'Field Qual', score: category_scores?.field_quality    ?? 0 },
   ];

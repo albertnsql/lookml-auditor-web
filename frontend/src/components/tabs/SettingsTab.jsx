@@ -19,14 +19,16 @@ export default function SettingsTab({ result, onReset }) {
       'info     × 0.1 (max 5)',
     ]],
     ['Category weights', [
-      'Broken Reference  35%',
-      'Duplicate Def     25%',
-      'Join Integrity    25%',
-      'Field Quality     15%',
+      'Broken Reference    35%',
+      'Dup View Source     12.5%',
+      'Dup Field SQL       12.5%',
+      'Join Integrity      25%',
+      'Field Quality       15%',
     ]],
     ['Ratio denominators', [
       'Broken Reference : explores + joins',
-      'Duplicate Def    : views + fields',
+      'Dup View Source  : views',
+      'Dup Field SQL    : fields',
       'Join Integrity   : joins × 2',
       'Field Quality    : fields + views',
     ]],
@@ -110,10 +112,11 @@ export default function SettingsTab({ result, onReset }) {
         <div className="card card-body">
           <div className="section-header" style={{marginTop:0}}>Category Scores</div>
           {[
-            ['Broken Reference',  category_scores.broken_reference],
-            ['Duplicate Def',     category_scores.duplicate_def],
-            ['Join Integrity',    category_scores.join_integrity],
-            ['Field Quality',     category_scores.field_quality],
+            ['Broken Reference',      category_scores.broken_reference],
+            ['Dup View Source',        category_scores.duplicate_view_source],
+            ['Dup Field SQL',          category_scores.duplicate_field_sql],
+            ['Join Integrity',         category_scores.join_integrity],
+            ['Field Quality',          category_scores.field_quality],
           ].map(([name, score]) => (
             <div key={name} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border)',fontSize:'13px'}}>
               <span>{name}</span>

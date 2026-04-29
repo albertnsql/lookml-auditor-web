@@ -13,10 +13,11 @@ class Severity(str, Enum):
 
 
 class IssueCategory(str, Enum):
-    BROKEN_REFERENCE  = "Broken Reference"
-    DUPLICATE         = "Duplicate Definition"
-    JOIN_INTEGRITY    = "Join Integrity"
-    FIELD_QUALITY     = "Field Quality"
+    BROKEN_REFERENCE       = "Broken Reference"
+    DUPLICATE_VIEW_SOURCE  = "Duplicate View Source"
+    DUPLICATE_FIELD_SQL    = "Duplicate Field SQL"
+    JOIN_INTEGRITY         = "Join Integrity"
+    FIELD_QUALITY          = "Field Quality"
     # DOCUMENTATION removed per request
 
 

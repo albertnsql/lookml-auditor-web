@@ -100,7 +100,8 @@ class ProjectSummary(BaseModel):
 
 class CategoryScores(BaseModel):
     broken_reference: int
-    duplicate_def: int
+    duplicate_view_source: int
+    duplicate_field_sql: int
     join_integrity: int
     field_quality: int
 
@@ -189,7 +190,8 @@ def _run_audit_pipeline(path: str, tmp_dir: Optional[str] = None, source_type: s
         health_score=health,
         category_scores=CategoryScores(
             broken_reference=cat_scores.get("Broken Reference", 100),
-            duplicate_def=cat_scores.get("Duplicate Def", 100),
+            duplicate_view_source=cat_scores.get("Duplicate View Source", 100),
+            duplicate_field_sql=cat_scores.get("Duplicate Field SQL", 100),
             join_integrity=cat_scores.get("Join Integrity", 100),
             field_quality=cat_scores.get("Field Quality", 100),
         ),

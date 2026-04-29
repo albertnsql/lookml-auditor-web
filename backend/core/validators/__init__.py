@@ -79,10 +79,12 @@ def compute_health_score(issues: list[Issue], project: LookMLProject | None = No
     for issue in issues:
         by_cat[issue.category] += 1
 
-    broken_count  = by_cat[IssueCategory.BROKEN_REFERENCE]
-    dup_count     = by_cat[IssueCategory.DUPLICATE]
-    join_count    = by_cat[IssueCategory.JOIN_INTEGRITY]
-    quality_count = by_cat[IssueCategory.FIELD_QUALITY]
+    broken_count      = by_cat[IssueCategory.BROKEN_REFERENCE]
+    dup_view_count    = by_cat[IssueCategory.DUPLICATE_VIEW_SOURCE]
+    dup_field_count   = by_cat[IssueCategory.DUPLICATE_FIELD_SQL]
+    dup_count         = dup_view_count + dup_field_count  # combined for weighted scoring
+    join_count        = by_cat[IssueCategory.JOIN_INTEGRITY]
+    quality_count     = by_cat[IssueCategory.FIELD_QUALITY]
 
     # ── Per-category scores ────────────────────────────────────────────────
     # Denominator choice: how many objects COULD be broken in each category
@@ -111,7 +113,8 @@ def compute_health_score(issues: list[Issue], project: LookMLProject | None = No
     breaking_categories = {
         IssueCategory.BROKEN_REFERENCE,
         IssueCategory.JOIN_INTEGRITY,
-        IssueCategory.DUPLICATE
+        IssueCategory.DUPLICATE_VIEW_SOURCE,
+        IssueCategory.DUPLICATE_FIELD_SQL,
     }
     breaking_errors = [
         i for i in errors
@@ -156,11 +159,15 @@ def compute_category_scores(issues: list[Issue],
     def _s(n_issues, denom):
         return max(0, int(100 * (1 - min(n_issues / denom, 1.0))))
 
+    dup_view_issues  = by_cat[IssueCategory.DUPLICATE_VIEW_SOURCE]
+    dup_field_issues = by_cat[IssueCategory.DUPLICATE_FIELD_SQL]
+
     return {
-        "Broken Reference":  _s(by_cat[IssueCategory.BROKEN_REFERENCE],  n_explores + n_joins),
-        "Duplicate Def":     _s(by_cat[IssueCategory.DUPLICATE],          n_views + n_fields),
-        "Join Integrity":    _s(by_cat[IssueCategory.JOIN_INTEGRITY],      n_joins * 2),
-        "Field Quality":     _s(by_cat[IssueCategory.FIELD_QUALITY],       n_fields + n_views),
+        "Broken Reference":      _s(by_cat[IssueCategory.BROKEN_REFERENCE],  n_explores + n_joins),
+        "Duplicate View Source": _s(dup_view_issues,                          n_views),
+        "Duplicate Field SQL":   _s(dup_field_issues,                         n_fields),
+        "Join Integrity":        _s(by_cat[IssueCategory.JOIN_INTEGRITY],      n_joins * 2),
+        "Field Quality":         _s(by_cat[IssueCategory.FIELD_QUALITY],       n_fields + n_views),
     }
 
 

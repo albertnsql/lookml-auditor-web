@@ -213,6 +213,7 @@ def _parse_view(block_text: str, line_num: int, source_file: str) -> Optional[Lo
         sql_table_name=sql_table,
         derived_table_sql=derived_sql,
         extends=extends,
+        extension_required=_get_attr(block_text, "extension") == "required",
         fields=fields,
         source_file=source_file,
         line_number=line_num,
