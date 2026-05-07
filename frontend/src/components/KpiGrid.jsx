@@ -23,47 +23,47 @@ function useCountUp(target, duration = 600, delay = 0) {
 
 // ── Tooltip text ─────────────────────────────────────────────
 const TIPS = {
-  'Total Issues':   'Sum of all errors, warnings, and info-level findings across the project.',
-  'Errors':         'Critical issues that will break explores or cause incorrect query results.',
-  'Warnings':       'Non-critical issues that degrade maintainability or performance.',
-  'Views':          'Total view files parsed in this LookML project.',
-  'Explores':       'Number of explore definitions found.',
+  'Total Issues': 'Sum of all errors, warnings, and info-level findings across the project.',
+  'Errors': 'Critical issues that will break explores or cause incorrect query results.',
+  'Warnings': 'Non-critical issues that degrade maintainability or performance.',
+  'Views': 'Total view files parsed in this LookML project.',
+  'Explores': 'Number of explore definitions found.',
   'Derived Tables': 'PDTs and NDTs detected across all views.',
-  'Dimensions':     'Total dimension fields across all views.',
-  'Measures':       'Total measure fields across all views.',
-  'Orphan Views':   'Views that are defined in .lkml files but never joined into any Explore. They\'re invisible to end users but still parsed by Looker on every project load, adding unnecessary overhead. Safe to delete if confirmed unused.',
-  'Zombies':        'Explores or Views that exist in the project but contain zero dimensions and zero measures — essentially empty shells. Unlike Orphan Views (which have fields but no Explore), Zombies are structurally incomplete. They may be placeholders from incomplete migrations or leftover scaffolding.',
-  'Missing PK':     'Views missing a dimension with primary_key: yes. Without a declared primary key, Looker cannot accurately detect fanout in joins — this can silently inflate metric values (e.g. revenue appearing 3x higher) when the view is joined to a fact table with a one-to-many relationship.',
-  'No Label':       'Fields missing a label — shows technical names in the UI.',
+  'Dimensions': 'Total dimension fields across all views.',
+  'Measures': 'Total measure fields across all views.',
+  'Orphan Views': 'Views that are defined in .lkml files but never joined into any Explore. They\'re invisible to end users but still parsed by Looker on every project load, adding unnecessary overhead. Safe to delete if confirmed unused.',
+  'Zombies': 'Explores or Views that exist in the project but contain zero dimensions and zero measures — essentially empty shells. Unlike Orphan Views (which have fields but no Explore), Zombies are structurally incomplete. They may be placeholders from incomplete migrations or leftover scaffolding.',
+  'Missing PK': 'Views missing a dimension with primary_key: yes. Without a declared primary key, Looker cannot accurately detect fanout in joins — this can silently inflate metric values (e.g. revenue appearing 3x higher) when the view is joined to a fact table with a one-to-many relationship.',
+  'No Label': 'Fields missing a label — shows technical names in the UI.',
   'No Description': 'Fields with no description — hurts self-service usability.',
 };
 
 export default function KpiGrid({ result, filters, onKpiClick }) {
-  const { views, explores, issues, health_score, category_scores } = result;
+  const { views, explores, issues, health_score, base_score, error_penalty, category_scores } = result;
   const fv = filterViews(views, filters);
   const fe = filterExplores(explores, filters);
   const fi = issues;
 
-  const errors   = fi.filter(i => i.severity === 'error');
+  const errors = fi.filter(i => i.severity === 'error');
   const warnings = fi.filter(i => i.severity === 'warning');
   const allViewNames = new Set(views.map(v => v.name));
   const allRefs = new Set(explores.flatMap(e => [e.base_view, ...e.joins.map(j => j.resolved_view)]));
-  const orphans   = fv.filter(v => !allRefs.has(v.name));
-  const zombies   = fe.filter(e => !allViewNames.has(e.base_view));
+  const orphans = fv.filter(v => !allRefs.has(v.name));
+  const zombies = fe.filter(e => !allViewNames.has(e.base_view));
   const missingPk = fv.filter(v => !v.has_primary_key);
-  const noLabel   = fv.flatMap(v => v.fields.filter(f => !f.hidden && ['dimension','dimension_group','measure'].includes(f.field_type) && !f.label));
-  const noDesc    = fv.flatMap(v => v.fields.filter(f => !f.hidden && ['dimension','dimension_group','measure'].includes(f.field_type) && !f.description));
-  const derived   = fv.filter(v => v.is_derived_table).length;
-  const dims      = fv.reduce((s, v) => s + v.n_dimensions, 0);
-  const meas      = fv.reduce((s, v) => s + v.n_measures, 0);
+  const noLabel = fv.flatMap(v => v.fields.filter(f => !f.hidden && ['dimension', 'dimension_group', 'measure'].includes(f.field_type) && !f.label));
+  const noDesc = fv.flatMap(v => v.fields.filter(f => !f.hidden && ['dimension', 'dimension_group', 'measure'].includes(f.field_type) && !f.description));
+  const derived = fv.filter(v => v.is_derived_table).length;
+  const dims = fv.reduce((s, v) => s + v.n_dimensions, 0);
+  const meas = fv.reduce((s, v) => s + v.n_measures, 0);
   const { color: hsColor, label: hsLabel } = scoreMeta(health_score);
 
   const miniScores = [
     { label: 'Broken Ref', score: category_scores?.broken_reference ?? 0 },
     { label: 'Dup View Src', score: category_scores?.duplicate_view_source ?? 0 },
-    { label: 'Dup Field SQL', score: category_scores?.duplicate_field_sql   ?? 0 },
-    { label: 'Join Int',   score: category_scores?.join_integrity   ?? 0 },
-    { label: 'Field Qual', score: category_scores?.field_quality    ?? 0 },
+    { label: 'Dup Field SQL', score: category_scores?.duplicate_field_sql ?? 0 },
+    { label: 'Join Int', score: category_scores?.join_integrity ?? 0 },
+    { label: 'Field Qual', score: category_scores?.field_quality ?? 0 },
   ];
 
   return (
@@ -72,21 +72,28 @@ export default function KpiGrid({ result, filters, onKpiClick }) {
       {/* ── Tier 1 — 5-column grid with 2-span hero ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '12px', width: '100%' }}>
         <div style={{ gridColumn: 'span 2' }}>
-          <HeroCard health={health_score} miniScores={miniScores} animDelay={100} />
+          <HeroCard
+            health={health_score}
+            base_score={base_score}
+            error_penalty={error_penalty}
+            errorCount={errors.length}
+            miniScores={miniScores}
+            animDelay={100}
+          />
         </div>
-        <KpiCard label="Total Issues" value={fi.length}        valueColor="var(--text-1)"                                          dur={600} delay={160} animIdx={1} contextStr={`across ${fv.length} views`} onClick={() => onKpiClick?.('total')} />
-        <KpiCard label="Errors"       value={errors.length}   valueColor={errors.length   > 0 ? 'var(--error)'   : 'var(--text-1)'} dur={600} delay={220} animIdx={2} contextStr={errors.length > 0 ? 'critical · fix required' : 'all clear'} onClick={() => onKpiClick?.('errors')} />
-        <KpiCard label="Warnings"     value={warnings.length} valueColor={warnings.length > 0 ? 'var(--warning)' : 'var(--text-1)'} dur={600} delay={280} animIdx={3} contextStr={warnings.length > 0 ? 'needs review' : 'all clear'} onClick={() => onKpiClick?.('warnings')} />
+        <KpiCard label="Total Issues" value={fi.length} valueColor="var(--text-1)" dur={600} delay={160} animIdx={1} contextStr={`across ${fv.length} views`} onClick={() => onKpiClick?.('total')} />
+        <KpiCard label="Errors" value={errors.length} valueColor={errors.length > 0 ? 'var(--error)' : 'var(--text-1)'} dur={600} delay={220} animIdx={2} contextStr={errors.length > 0 ? 'critical · fix required' : 'all clear'} onClick={() => onKpiClick?.('errors')} />
+        <KpiCard label="Warnings" value={warnings.length} valueColor={warnings.length > 0 ? 'var(--warning)' : 'var(--text-1)'} dur={600} delay={280} animIdx={3} contextStr={warnings.length > 0 ? 'needs review' : 'all clear'} onClick={() => onKpiClick?.('warnings')} />
       </div>
 
       {/* ── Tier 2 ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '12px', width: '100%' }}>
         {[
-          { label: 'Views',          value: fv.length },
-          { label: 'Explores',       value: fe.length },
+          { label: 'Views', value: fv.length },
+          { label: 'Explores', value: fe.length },
           { label: 'Derived Tables', value: derived },
-          { label: 'Dimensions',     value: dims },
-          { label: 'Measures',       value: meas },
+          { label: 'Dimensions', value: dims },
+          { label: 'Measures', value: meas },
         ].map((k, i) => (
           <KpiCard key={k.label} {...k} dur={400} delay={300 + i * 40} animIdx={i} />
         ))}
@@ -95,11 +102,11 @@ export default function KpiGrid({ result, filters, onKpiClick }) {
       {/* ── Tier 3 ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', width: '100%' }}>
         {[
-          { label: 'Orphan Views',    value: orphans.length,  valueColor: orphans.length  > 0 ? 'var(--warning)' : 'var(--text-1)', onClick: () => onKpiClick?.('orphan_views') },
-          { label: 'Zombies',         value: zombies.length,  valueColor: zombies.length  > 0 ? 'var(--error)'   : 'var(--text-1)' },
-          { label: 'Missing PK',      value: missingPk.length,valueColor: missingPk.length> 0 ? 'var(--warning)' : 'var(--text-1)', onClick: () => onKpiClick?.('missing_pk') },
-          { label: 'No Label',        value: noLabel.length,  valueColor: 'var(--text-2)', onClick: () => onKpiClick?.('no_label') },
-          { label: 'No Description',  value: noDesc.length,   valueColor: 'var(--text-2)', onClick: () => onKpiClick?.('no_description') },
+          { label: 'Orphan Views', value: orphans.length, valueColor: orphans.length > 0 ? 'var(--warning)' : 'var(--text-1)', onClick: () => onKpiClick?.('orphan_views') },
+          { label: 'Zombies', value: zombies.length, valueColor: zombies.length > 0 ? 'var(--error)' : 'var(--text-1)' },
+          { label: 'Missing PK', value: missingPk.length, valueColor: missingPk.length > 0 ? 'var(--warning)' : 'var(--text-1)', onClick: () => onKpiClick?.('missing_pk') },
+          { label: 'No Label', value: noLabel.length, valueColor: 'var(--text-2)', onClick: () => onKpiClick?.('no_label') },
+          { label: 'No Description', value: noDesc.length, valueColor: 'var(--text-2)', onClick: () => onKpiClick?.('no_description') },
         ].map((k, i) => (
           <KpiCard key={k.label} {...k} dur={400} delay={450 + i * 40} animIdx={i} />
         ))}
@@ -109,16 +116,23 @@ export default function KpiGrid({ result, filters, onKpiClick }) {
 }
 
 // ── Hero Card ─────────────────────────────────────────────────
-function HeroCard({ health, miniScores, animDelay = 0 }) {
-  const displayed = useCountUp(health, 800, animDelay);
+function HeroCard({ health: final_score, base_score = 0, error_penalty = 0, errorCount = 0, miniScores, animDelay = 0 }) {
+  const displayed = useCountUp(final_score, 800, animDelay);
   const [hovered, setHovered] = useState(false);
-  const { bg, color, dot, label } = scoreMeta(health);
+  const [tipVisible, setTipVisible] = useState(false);
+  const { bg, color, dot, label } = scoreMeta(final_score);
+
+  // const tooltipText = errorCount > 0
+  //   ? `Base score:     ${base_score}\nError penalty:  -${error_penalty}  (${errorCount} critical error${errorCount > 1 ? 's' : ''} × 1pt)\nFinal score:    ${final_score}`
+  //   : `Score reflects ratio-based analysis across all rules. No critical errors.`;
 
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      className="card"
+      onMouseEnter={() => { setHovered(true); setTipVisible(true); }}
+      onMouseLeave={() => { setHovered(false); setTipVisible(false); }}
       style={{
+        position: 'relative',
         background: hovered
           ? 'linear-gradient(135deg, #FFFFFF 50%, #EEF2FF 100%)'
           : 'linear-gradient(135deg, #FFFFFF 60%, #F0EEFF 100%)',
@@ -136,7 +150,7 @@ function HeroCard({ health, miniScores, animDelay = 0 }) {
       }}
     >
       {/* Left: score + label */}
-      <div>
+      <div style={{ position: 'relative' }}>
         <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '11px', fontWeight: 600, color: 'var(--text-2)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '8px' }}>
           Health Score
         </div>
@@ -164,12 +178,12 @@ function HeroCard({ health, miniScores, animDelay = 0 }) {
 function MiniBar({ label, score, delay }) {
   const [h, setH] = useState(0);
   const MAX_H = 48; // fixed max-height 48px
-  
+
   useEffect(() => {
     const t = setTimeout(() => setH((score / 100) * MAX_H), delay);
     return () => clearTimeout(t);
   }, [score, delay]);
-  
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
       <div style={{ position: 'relative', width: 8, height: MAX_H, background: '#DDD9F0', borderRadius: '4px', display: 'flex', alignItems: 'flex-end' }}>
@@ -261,8 +275,8 @@ function KpiCard({ label, value, valueColor = 'var(--text-1)', dur = 600, delay 
         }}>
           View in Issues
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="5" y1="12" x2="19" y2="12"/>
-            <polyline points="12 5 19 12 12 19"/>
+            <line x1="5" y1="12" x2="19" y2="12" />
+            <polyline points="12 5 19 12 12 19" />
           </svg>
         </div>
       )}
@@ -279,9 +293,10 @@ function DarkTooltip({ text }) {
       border: '2px solid rgba(99,91,255,0.6)',
       borderRadius: '10px', padding: '10px 14px',
       fontSize: '13px', fontFamily: 'Inter, sans-serif', fontWeight: 400,
-      maxWidth: 220, width: 'max-content', zIndex: 300,
+      maxWidth: 260, width: 'max-content', zIndex: 300,
       boxShadow: '0 8px 32px rgba(99,91,255,0.25)',
       lineHeight: 1.5,
+      whiteSpace: 'pre-wrap',
       animation: 'tooltipIn 150ms ease both',
     }}>
       {text}

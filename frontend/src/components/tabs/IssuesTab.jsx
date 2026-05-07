@@ -174,6 +174,26 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
         (i.source_file || '').toLowerCase().includes(q)
       );
     }
+    if (filters.explore) {
+      const expObj = auditData.explores?.find(e => e.name === filters.explore);
+      const relevantViews = [];
+      if (expObj) {
+        if (expObj.base_view) relevantViews.push(expObj.base_view);
+        if (expObj.joins) {
+          expObj.joins.forEach(j => {
+            if (j.resolved_view) relevantViews.push(j.resolved_view);
+            else if (j.name) relevantViews.push(j.name);
+          });
+        }
+      }
+      
+      issues = issues.filter(i => {
+        if (i.object_type === 'explore' && i.object_name === filters.explore) return true;
+        if (i.explore === filters.explore) return true;
+        if (relevantViews.includes(i.object_name)) return true;
+        return false;
+      });
+    }
     return issues;
   }, [auditData, filters]);
 
@@ -225,7 +245,7 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', animation: 'fadeSlideUp 400ms ease-out 200ms both', maxWidth: '100%', overflowX: 'hidden' }}>
       
       {/* ── Filter Banner ── */}
-      {(filters.severity.length < 3 || filters.category !== 'all' || filters.search) && (
+      {(filters.severity.length < 3 || filters.category !== 'all' || filters.search || filters.explore) && (
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           background: '#EEF2FF', border: '1px solid rgba(99,91,255,0.2)',
@@ -233,6 +253,7 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
         }}>
           <span style={{ font: '13px Sora', fontWeight: 600, color: '#635BFF' }}>
             Filtered by: {
+              filters.explore ? `explore: ${filters.explore}` :
               filters.severity.length < 3 ? `${filters.severity.join(', ')} severity` : 
               filters.category !== 'all' ? `category: ${filters.category}` :
               filters.search ? `search: "${filters.search}"` : 'active filters'
@@ -243,7 +264,8 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
               severity: ['error', 'warning', 'info'],
               category: 'all',
               file: null,
-              search: ''
+              search: '',
+              explore: null
             })}
             style={{ background: 'none', border: 'none', color: '#635BFF', cursor: 'pointer', font: '12px Sora', fontWeight: 600 }}
           >

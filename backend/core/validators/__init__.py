@@ -42,7 +42,7 @@ def run_all_checks(project: LookMLProject) -> list[Issue]:
     return issues
 
 
-def compute_health_score(issues: list[Issue], project: LookMLProject | None = None) -> int:
+def compute_health_score(issues: list[Issue], project: LookMLProject | None = None) -> dict[str, int]:
     """
     Ratio-based health score (0–100).
 
@@ -65,7 +65,13 @@ def compute_health_score(issues: list[Issue], project: LookMLProject | None = No
         ep = min(errors   * 8,   70)
         wp = min(warnings * 1,   10)
         ip = min(infos    * 0.1,  5)
-        return max(0, int(100 - ep - wp - ip))
+        base = max(0, int(100 - wp - ip)) # without critical error penalty
+        final = max(0, int(100 - ep - wp - ip))
+        return {
+            "final_score": final,
+            "base_score": base,
+            "error_penalty": int(ep)
+        }
 
     # ── Denominators (max objects that could have issues) ──────────────────
     n_views    = max(len(project.views),    1)
@@ -121,19 +127,24 @@ def compute_health_score(issues: list[Issue], project: LookMLProject | None = No
         if i.category in breaking_categories
     ]
 
-    # Apply caps based on breaking error count
-    if len(breaking_errors) >= 5:
-        score = min(score, 70)   # 5+ breaking errors — max 70
-    elif len(breaking_errors) >= 3:
-        score = min(score, 80)   # 3-4 breaking errors — max 80
-    elif len(breaking_errors) >= 1:
-        score = min(score, 88)   # 1-2 breaking errors — max 88
+    base_score = score
+    penalty_applied = 0.0
 
-    # Any errors at all cap at 92
+    # Apply soft penalty based on breaking error count
+    if len(breaking_errors) > 0:
+        penalty_applied = min(len(breaking_errors) * 1.0, 15.0)  # -1 point per error, max -15
+        score = score - penalty_applied
+
+    # Ensure a truly perfect score requires zero errors
     if error_count > 0:
-        score = min(score, 92)
+        score = min(score, 98)
 
-    return max(0, min(100, int(score)))
+    final_score = max(0, min(100, int(score)))
+    return {
+        "final_score": final_score,
+        "base_score": max(0, min(100, int(base_score))),
+        "error_penalty": int(penalty_applied)
+    }
 
 
 def get_health_status(score: int) -> str:

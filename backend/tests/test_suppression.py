@@ -222,7 +222,7 @@ class TestApplySuppressions:
 
     def test_end_to_end_with_disk_project(self, suppression_project_dir):
         """Integration: load rules from disk and suppress real validator output."""
-        from lookml_parser.parser import parse_project
+        from lookml_parser import parse_project
         from validators import run_all_checks
 
         project = parse_project(suppression_project_dir)

@@ -1,8 +1,11 @@
 """
 LookML Auditor — FastAPI Backend
 Full port of all Streamlit dashboard.py functionality.
+
+Parser: lkml AST-based parser (Phase 3 — regex parser removed).
 """
 from __future__ import annotations
+
 import os, sys, shutil, subprocess, tempfile, zipfile, re
 from pathlib import Path
 from typing import Optional
@@ -19,6 +22,7 @@ core_dir = os.path.join(current_dir, "core")
 sys.path.insert(0, core_dir)
 
 from lookml_parser import parse_project
+
 from lookml_parser.models import LookMLProject
 from validators import run_all_checks, compute_health_score, compute_category_scores
 from validators.suppression import load_suppression_rules, apply_suppressions
@@ -66,6 +70,7 @@ class ViewOut(BaseModel):
     sql_table_name: Optional[str] = None
     derived_table_sql: Optional[str] = None
     is_derived_table: bool
+    is_pdt: bool = False
     has_primary_key: bool
     primary_key_field: Optional[str] = None
     fields: list[FieldOut] = []
@@ -112,6 +117,8 @@ class AuditResponse(BaseModel):
     issues: list[IssueOut]
     suppressed: int
     health_score: int
+    base_score: int = 0
+    error_penalty: int = 0
     category_scores: CategoryScores
     tmp_dir: Optional[str] = None
     source_type: str = "local"
@@ -124,6 +131,10 @@ def _run_audit_pipeline(path: str, tmp_dir: Optional[str] = None, source_type: s
     issues_raw, suppressed_count = apply_suppressions(issues_raw, rules, project.root_path)
 
     health = compute_health_score(issues_raw, project)
+    health_score = health["final_score"]
+    base_score = health["base_score"]
+    error_penalty = health["error_penalty"]
+
     cat_scores = compute_category_scores(issues_raw, project)
 
     views_out = []
@@ -134,6 +145,7 @@ def _run_audit_pipeline(path: str, tmp_dir: Optional[str] = None, source_type: s
             sql_table_name=v.sql_table_name,
             derived_table_sql=v.derived_table_sql,
             is_derived_table=v.is_derived_table,
+            is_pdt=v.is_pdt,
             has_primary_key=v.has_primary_key,
             primary_key_field=pk.name if pk else None,
             fields=[FieldOut(
@@ -187,7 +199,9 @@ def _run_audit_pipeline(path: str, tmp_dir: Optional[str] = None, source_type: s
         explores=explores_out,
         issues=issues_out,
         suppressed=suppressed_count,
-        health_score=health,
+        health_score=health_score,
+        base_score=base_score,
+        error_penalty=error_penalty,
         category_scores=CategoryScores(
             broken_reference=cat_scores.get("Broken Reference", 100),
             duplicate_view_source=cat_scores.get("Duplicate View Source", 100),

@@ -125,8 +125,8 @@ return(
 const STEPS=[
   {n:'01',title:'Provide Your Source',color:'#6366F1',tags:['GitHub URL','ZIP Upload','Local Path'],
    desc:'Paste a public GitHub URL, drag-and-drop a ZIP file, or point to a local directory. No tokens, no sign-up, no CLI required.',V:V1},
-  {n:'02',title:'Parsed Locally in Your Browser',color:'#8B5CF6',tags:['Zero network requests','Regex-based AST','Instant tokenisation'],
-   desc:'Every .lkml file is tokenised and parsed using a custom regex-based static analyser that runs 100% inside your browser tab. Your LookML never leaves your machine.',V:V2},
+  {n:'02',title:'Parsed Locally in Your Browser',color:'#8B5CF6',tags:['Zero network requests','Python-based AST','Instant tokenisation'],
+   desc:'Every .lkml file is tokenised and parsed using a custom AST-based static analyser that runs securely. Your LookML never leaves your machine.',V:V2},
   {n:'03',title:'Rules Engine Runs',color:'#635BFF',tags:['5 rule categories','Severity tagging','File + line numbers'],
    desc:'Five rule categories are evaluated in sequence — Broken References, Duplicate Definitions, Join Integrity, Field Quality, and Orphan Views — each with ERROR, WARNING, or INFO severity.',V:V3},
   {n:'04',title:'Interactive Report Ready',color:'#09A55A',tags:['Health score /100','CSV export','File Viewer'],

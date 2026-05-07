@@ -30,7 +30,8 @@ export default function Dashboard({ auditData, isLoading, onReset }) {
     severity: ['error', 'warning', 'info'],
     category: 'all',
     file: null,
-    search: ''
+    search: '',
+    explore: null
   });
 
   // Target for navigating from Issues → File Viewer
@@ -69,6 +70,11 @@ export default function Dashboard({ auditData, isLoading, onReset }) {
       default:
         break;
     }
+  };
+
+  const handleExploreFilter = (exploreName) => {
+    setActiveTab('issues');
+    setIssueFilters(f => ({ ...f, explore: exploreName, severity: ['error', 'warning', 'info'], category: 'all', search: '', file: null }));
   };
 
   const filters = { folders: [], exploreNames: [] };
@@ -213,7 +219,7 @@ export default function Dashboard({ auditData, isLoading, onReset }) {
               onOpenInFileViewer={handleOpenInFileViewer}
             />
           )}
-          {activeTab === 'visuals'    && <VisualizationsTab result={auditData} />}
+          {activeTab === 'visuals'    && <VisualizationsTab result={auditData} onExploreClick={handleExploreFilter} />}
           {activeTab === 'inventory'  && <InventoryTab      result={auditData} />}
           {activeTab === 'rules'      && <AuditRulesTab     rules={RULES} />}
           {activeTab === 'fileviewer' && <FileViewerTab result={auditData} initialFile={fileViewerTarget?.path} initialLine={fileViewerTarget?.line} />}

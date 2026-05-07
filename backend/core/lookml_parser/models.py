@@ -29,6 +29,10 @@ class LookMLView(BaseModel):
     name: str
     sql_table_name: Optional[str] = None
     derived_table_sql: Optional[str] = None
+    # True when the derived_table block contains any persistence key:
+    # persist_for, datagroup_trigger, sql_trigger_value, or persist_with.
+    # False means the view is an NDT (non-derived table or native DT).
+    is_pdt: bool = False
     extends: list[str] = Field(default_factory=list)
     fields: list[LookMLField] = Field(default_factory=list)
     extension_required: bool = False
@@ -49,6 +53,7 @@ class LookMLView(BaseModel):
 
     @property
     def is_derived_table(self) -> bool:
+        """True for any view that has a derived_table block (PDT or NDT)."""
         return self.derived_table_sql is not None
 
     @property

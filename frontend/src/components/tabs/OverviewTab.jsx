@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { scoreMeta } from '../../utils';
 
 export default function OverviewTab({ result }) {
-  const { health_score, category_scores, issues } = result;
+  const { health_score, error_penalty, category_scores, issues } = result;
   const { color: hsColor, label: hsLabel } = scoreMeta(health_score);
 
   const bySev = groupBy(issues, i => i.severity);
@@ -43,7 +43,7 @@ export default function OverviewTab({ result }) {
         {/* Col 1 — Project Health: Radial Score Card */}
         <div className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div className="section-label" style={{ marginBottom: '16px' }}>Project Health</div>
-          <RadialScoreCard score={health_score} catScores={catScores} />
+          <RadialScoreCard score={health_score} catScores={catScores} errCount={err} penalty={error_penalty} />
         </div>
 
         {/* Col 2 — Issues by Category: Ranked Bar Chart */}
@@ -165,7 +165,7 @@ export default function OverviewTab({ result }) {
 }
 
 // ── Radial Score Card ─────────────────────────────────────────
-function RadialScoreCard({ score, catScores }) {
+function RadialScoreCard({ score, catScores, errCount = 0, penalty = 0 }) {
   const [animScore, setAnimScore] = useState(0);
   const { bg, color, label } = scoreMeta(score);
 
@@ -218,9 +218,16 @@ function RadialScoreCard({ score, catScores }) {
         </svg>
 
         {/* Healthy Badge */}
-        <div style={{ position: 'absolute', top: '138px', left: '50%', transform: 'translateX(-50%)', background: bg, color: color, borderRadius: '20px', padding: '4px 14px', fontSize: '13px', fontFamily: 'Sora, sans-serif', fontWeight: 600 }}>
+        <div style={{ position: 'absolute', top: '138px', left: '50%', transform: 'translateX(-50%)', background: bg, color: color, borderRadius: '20px', padding: '4px 14px', fontSize: '13px', fontFamily: 'Sora, sans-serif', fontWeight: 600, whiteSpace: 'nowrap' }}>
           {label}
         </div>
+
+        {/* Penalty Line */}
+        {errCount > 0 && penalty > 0 && (
+          <div style={{ position: 'absolute', top: '168px', left: '50%', transform: 'translateX(-50%)', color: 'var(--error)', fontSize: '12px', fontWeight: 500, fontFamily: 'Sora, sans-serif', whiteSpace: 'nowrap' }}>
+            -{penalty} pts · {errCount} critical error{errCount === 1 ? '' : 's'} {penalty >= 15 && '(cap reached)'}
+          </div>
+        )}
       </div>
 
       {/* Bottom Half: 2x2 Grid */}

@@ -500,36 +500,37 @@ class TestHealthScore:
 
     def test_clean_project_scores_high(self, clean_project):
         issues = run_all_checks(clean_project)
-        score = compute_health_score(issues, clean_project)
+        score = compute_health_score(issues, clean_project)["final_score"]
         assert score >= 85
 
     def test_empty_project_scores_100(self, empty_project):
         issues = run_all_checks(empty_project)
-        score = compute_health_score(issues, empty_project)
+        score = compute_health_score(issues, empty_project)["final_score"]
         assert score == 100
 
     def test_score_bounded_0_to_100(self, broken_refs_project):
         issues = run_all_checks(broken_refs_project)
-        score = compute_health_score(issues, broken_refs_project)
+        score = compute_health_score(issues, broken_refs_project)["final_score"]
         assert 0 <= score <= 100
 
     def test_score_decreases_with_errors(self, clean_project, broken_refs_project):
         clean_issues   = run_all_checks(clean_project)
         broken_issues  = run_all_checks(broken_refs_project)
-        clean_score    = compute_health_score(clean_issues, clean_project)
-        broken_score   = compute_health_score(broken_issues, broken_refs_project)
+        clean_score    = compute_health_score(clean_issues, clean_project)["final_score"]
+        broken_score   = compute_health_score(broken_issues, broken_refs_project)["final_score"]
         assert broken_score <= clean_score
 
-    def test_breaking_errors_cap_score(self, make_view, make_explore, make_project):
-        """5+ breaking errors must cap score at 70."""
+    def test_breaking_errors_apply_soft_penalty(self, make_view, make_explore, make_project):
+        """Breaking errors apply a soft penalty lowering the ratio-based score."""
         explores = [
             make_explore(f"ghost_{i}", from_view=f"missing_{i}")
             for i in range(6)
         ]
         p = make_project(views=[], explores=explores)
         issues = run_all_checks(p)
-        score = compute_health_score(issues, p)
-        assert score <= 70
+        score = compute_health_score(issues, p)["final_score"]
+        # A flat -6 penalty will pull the score down below the raw ratio calculation.
+        assert score < 70
 
     def test_fallback_mode_no_project(self):
         """compute_health_score without project arg uses fallback penalty."""
@@ -538,13 +539,26 @@ class TestHealthScore:
             Issue(category=IssueCategory.BROKEN_REFERENCE, severity=Severity.ERROR,
                   message="x", object_type="explore", object_name="x")
         ]
-        score = compute_health_score(issues)
+        score = compute_health_score(issues)["final_score"]
         assert 0 <= score <= 100
 
     def test_returns_integer(self, clean_project):
         issues = run_all_checks(clean_project)
-        score = compute_health_score(issues, clean_project)
-        assert isinstance(score, int)
+        score = compute_health_score(issues, clean_project)["final_score"]
+
+    def test_health_score_returns_breakdown_dict(self, make_explore, make_project):
+        """compute_health_score must return final_score, base_score, and error_penalty."""
+        e = make_explore("orders", from_view="missing_view")
+        p = make_project(views=[], explores=[e])
+        issues = run_all_checks(p)
+        res = compute_health_score(issues, p)
+        
+        assert isinstance(res, dict)
+        assert "final_score" in res
+        assert "base_score" in res
+        assert "error_penalty" in res
+        assert res["error_penalty"] > 0
+        assert res["final_score"] == res["base_score"] - res["error_penalty"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

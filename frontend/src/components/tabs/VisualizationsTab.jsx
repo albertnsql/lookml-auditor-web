@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 
 // ── Components ──
-export default function VisualizationsTab({ result }) {
+export default function VisualizationsTab({ result, onExploreClick }) {
   const { views, explores, issues } = result;
   const [filters, setFilters] = useState({
     folders: [],
@@ -276,18 +276,41 @@ export default function VisualizationsTab({ result }) {
     let p=0, n=0, nat=0;
     const mapped = dts.map(v => {
       const sql = v.derived_table_sql || '';
-      const lines = sql.split('\\n').length;
+      const lines = sql.split('\n').length;
       const ls = sql.toLowerCase();
-      let type = 'PDT';
-      if (ls.includes('explore_source')) { type = 'NDT'; nat++; n++; }
-      else if (ls.includes('persist_for') || ls.includes('datagroup_trigger')) { p++; }
-      else { n++; }
+      // Native DTs (explore_source) are detected from the SQL body —
+      // they use LookML's native derived table syntax inside the SQL block.
+      // PDTs are detected via is_pdt which the backend sets by checking
+      // for persistence keys (persist_for, datagroup_trigger, sql_trigger_value,
+      // persist_with) directly in the parsed AST dict, not the SQL body.
+      let type;
+      if (ls.includes('explore_source')) { type = 'Native DT'; nat++; n++; }
+      else if (v.is_pdt) { type = 'PDT'; p++; }
+      else { type = 'NDT'; n++; }
       return { name: v.name, type, lines };
     }).sort((a,b) => b.lines - a.lines);
     return { dtList: mapped.slice(0, 5), pdtCount: p, ndtCount: n, nativeCount: nat };
   }, [activeViews]);
 
-  const matrixExplores = useMemo(() => exploresList.slice(0, 8).map(e => e.name), [exploresList]);
+  const matrixExplores = useMemo(() => {
+    const seen = {};
+    explores.forEach(e => {
+      const name = e.name;
+      const joins = e.joins ? e.joins.length : 0;
+      if (!seen[name] || joins > seen[name].joins) {
+        seen[name] = {
+          name: name,
+          joins: joins,
+          source_file: e.source_file,
+          original: e
+        };
+      }
+    });
+
+    return Object.values(seen)
+      .sort((a, b) => b.joins - a.joins)
+      .slice(0, 8);
+  }, [explores]);
 
   const handleTooltip = (e, content) => {
     if (!content) {
@@ -1182,8 +1205,9 @@ export default function VisualizationsTab({ result }) {
             <svg viewBox="0 0 600 500" width="100%" height="100%" style={{ overflow: 'visible' }}>
               {/* Arcs Layer */}
               <g>
-                {matrixExplores.map((exp, expIndex) => {
+                {matrixExplores.map((expNode, expIndex) => {
                   return matrixViews.map((view, viewIndex) => {
+                    const exp = expNode.name;
                     const expObj = activeExplores.find(e => e.name === exp);
                     if (!expObj) return null;
                     const isJoined = expObj.base_view === view || (expObj.joins || []).some(j => j.resolved_view === view);
@@ -1191,7 +1215,7 @@ export default function VisualizationsTab({ result }) {
 
                     const isMatch = checkMatch(exp);
                     const startY = 40 + expIndex * 50;
-                    const endY = 40 + viewIndex * 40;
+                    const endY = 40 + viewIndex * 50;
                     const strokeWidth = Math.max(1, (viewUsageCount[view] || 1) / 20);
                     
                     const isExpHovered = arcHoverExplore === exp || arcClickExplore === exp;
@@ -1213,7 +1237,7 @@ export default function VisualizationsTab({ result }) {
 
                     return (
                       <ArcPath 
-                        key={`${exp}-${view}`} 
+                        key={`${exp}_${expNode.source_file || expIndex}-${view}`} 
                         x1={145} y1={startY} x2={455} y2={endY} 
                         color={color} opacity={opacity} strokeWidth={activeStrokeWidth} 
                         delay={500 + (expIndex * 10 + viewIndex) * 30}
@@ -1242,13 +1266,15 @@ export default function VisualizationsTab({ result }) {
 
               {/* Explores Column (Left) */}
               <g>
-                {matrixExplores.map((exp, i) => {
+                {matrixExplores.map((expNode, i) => {
+                  const exp = expNode.name;
+                  const keyStr = `${exp}_${expNode.source_file || i}`;
                   const y = 40 + i * 50;
                   const isHovered = arcHoverExplore === exp || arcClickExplore === exp;
                   const isMatch = checkMatch(exp);
                   return (
                     <NodeRect 
-                      key={exp} x={15} y={y - 14} w={130} h={28} rx={14}
+                      key={keyStr} x={15} y={y - 14} w={130} h={28} rx={14}
                       label={exp} isHovered={isHovered} isLeft={true} isDimmed={!isMatch}
                       delay={300 + i*40}
                       onMouseEnter={(e) => {
@@ -1261,7 +1287,10 @@ export default function VisualizationsTab({ result }) {
                         ));
                       }}
                       onMouseLeave={() => { setArcHoverExplore(null); handleTooltip(null, null); }}
-                      onClick={() => setArcClickExplore(p => p === exp ? null : exp)}
+                      onClick={() => {
+                        if (onExploreClick) onExploreClick(exp);
+                        else setArcClickExplore(p => p === exp ? null : exp);
+                      }}
                     />
                   );
                 })}
@@ -1270,7 +1299,7 @@ export default function VisualizationsTab({ result }) {
               {/* Views Column (Right) */}
               <g>
                 {matrixViews.map((view, i) => {
-                  const y = 40 + i * 40;
+                  const y = 40 + i * 50;
                   const isHovered = arcHoverView === view;
                   return (
                     <NodeRect 
@@ -1490,6 +1519,8 @@ function NodeRect({ x, y, w, h, rx, label, isLeft, isHovered, isDimmed, delay, o
   const activeFill = isHovered ? (isLeft ? 'rgba(99,91,255,0.2)' : 'rgba(9,165,90,0.15)') : fill;
   const finalOpacity = show ? (isDimmed ? 0.1 : 1) : 0;
 
+  const displayLabel = label.length > 28 ? label.slice(0, 27) + '…' : label;
+
   return (
     <g 
       style={{ opacity: finalOpacity, transition: 'opacity 400ms ease', cursor: 'pointer' }} 
@@ -1497,7 +1528,7 @@ function NodeRect({ x, y, w, h, rx, label, isLeft, isHovered, isDimmed, delay, o
     >
       <rect x={x} y={y} width={w} height={h} rx={rx} fill={activeFill} stroke={stroke} strokeWidth={activeStrokeWidth} style={{ transition: 'all 200ms ease' }} />
       <text x={x + w/2} y={y + h/2 + 1} textAnchor="middle" dominantBaseline="middle" fontSize="11" fontFamily="Sora, sans-serif" fontWeight="600" fill={stroke}>
-        {label}
+        {displayLabel}
       </text>
     </g>
   );
