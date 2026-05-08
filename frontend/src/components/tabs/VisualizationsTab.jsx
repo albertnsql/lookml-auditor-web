@@ -271,25 +271,18 @@ export default function VisualizationsTab({ result, onExploreClick }) {
     return { viewUsageCount: vc, matrixViews: mv };
   }, [activeExplores]);
 
-  const { dtList, pdtCount, ndtCount, nativeCount } = useMemo(() => {
+  const { dtList, pdtCount, ndtCount } = useMemo(() => {
     const dts = activeViews.filter(v => v.is_derived_table);
-    let p=0, n=0, nat=0;
+    let p=0, n=0;
     const mapped = dts.map(v => {
       const sql = v.derived_table_sql || '';
       const lines = sql.split('\n').length;
-      const ls = sql.toLowerCase();
-      // Native DTs (explore_source) are detected from the SQL body —
-      // they use LookML's native derived table syntax inside the SQL block.
-      // PDTs are detected via is_pdt which the backend sets by checking
-      // for persistence keys (persist_for, datagroup_trigger, sql_trigger_value,
-      // persist_with) directly in the parsed AST dict, not the SQL body.
       let type;
-      if (ls.includes('explore_source')) { type = 'Native DT'; nat++; n++; }
-      else if (v.is_pdt) { type = 'PDT'; p++; }
+      if (v.is_pdt) { type = 'PDT'; p++; }
       else { type = 'NDT'; n++; }
       return { name: v.name, type, lines };
     }).sort((a,b) => b.lines - a.lines);
-    return { dtList: mapped.slice(0, 5), pdtCount: p, ndtCount: n, nativeCount: nat };
+    return { dtList: mapped.slice(0, 5), pdtCount: p, ndtCount: n };
   }, [activeViews]);
 
   const matrixExplores = useMemo(() => {
@@ -1148,7 +1141,7 @@ export default function VisualizationsTab({ result, onExploreClick }) {
         <div className="card" style={{ flex: '5', padding: '24px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ marginBottom: '24px' }}>
             <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-2)' }}>Derived Table Breakdown</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>{pdtCount + ndtCount + nativeCount} derived tables detected</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>{pdtCount + ndtCount} derived tables detected</div>
           </div>
           
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -1162,17 +1155,11 @@ export default function VisualizationsTab({ result, onExploreClick }) {
               <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-1)', marginBottom: '2px' }}>NDT</div>
               <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>Non-persistent</div>
             </div>
-            <div>
-              <div style={{ fontFamily: 'Sora, sans-serif', fontSize: '28px', fontWeight: 700, color: 'var(--info)', lineHeight: 1, marginBottom: '4px' }}>{nativeCount}</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-1)', marginBottom: '2px' }}>Native</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>Native derived tables</div>
-            </div>
           </div>
 
           <div style={{ width: '100%', height: '12px', borderRadius: '6px', display: 'flex', overflow: 'hidden', marginBottom: '16px' }}>
-            <div style={{ width: `${(pdtCount / Math.max(1, pdtCount+ndtCount+nativeCount)) * 100}%`, background: 'var(--accent)' }} />
-            <div style={{ width: `${(ndtCount / Math.max(1, pdtCount+ndtCount+nativeCount)) * 100}%`, background: 'var(--warning)' }} />
-            <div style={{ width: `${(nativeCount / Math.max(1, pdtCount+ndtCount+nativeCount)) * 100}%`, background: 'var(--info)' }} />
+            <div style={{ width: `${(pdtCount / Math.max(1, pdtCount+ndtCount)) * 100}%`, background: 'var(--accent)' }} />
+            <div style={{ width: `${(ndtCount / Math.max(1, pdtCount+ndtCount)) * 100}%`, background: 'var(--warning)' }} />
           </div>
 
           <div style={{ background: '#FFFBEB', border: '1px solid rgba(217,119,6,0.2)', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', color: 'var(--warning)', marginBottom: '16px' }}>
