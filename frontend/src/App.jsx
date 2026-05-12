@@ -9,7 +9,7 @@ import ScrollToTop      from './components/ScrollToTop';
 import { useAudit } from './hooks/useAudit';
 
 export default function App() {
-  const { result, loading, runGithub, runUpload, reset } = useAudit();
+  const { result, loading, error, progress, runGithub, runGithubStream, runUpload, runLocal, reset, cleanup } = useAudit();
   const location = useLocation();
   const path = location.pathname;
 
@@ -31,7 +31,7 @@ export default function App() {
       ) : (
         <LandingPage 
           onAuditDone={(data) => {}} 
-          useAuditProps={{ runGithub, runUpload, loading }}
+          useAuditProps={{ runGithub, runGithubStream, runUpload, runLocal, loading, error, progress, cleanup }}
         />
       )}
     </>
