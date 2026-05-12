@@ -36,9 +36,17 @@ ALL_CHECKS = [
 
 
 def run_all_checks(project: LookMLProject) -> list[Issue]:
+    """Run all audit checks concurrently — each check is independent and read-only."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     issues: list[Issue] = []
-    for check_fn in ALL_CHECKS:
-        issues.extend(check_fn(project))
+    with ThreadPoolExecutor(max_workers=len(ALL_CHECKS)) as executor:
+        futures = [executor.submit(fn, project) for fn in ALL_CHECKS]
+        for future in as_completed(futures):
+            try:
+                issues.extend(future.result())
+            except Exception as exc:  # noqa: BLE001
+                import logging
+                logging.getLogger(__name__).warning("Validator error: %s", exc)
     return issues
 
 

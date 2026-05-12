@@ -70,7 +70,7 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
     window.scrollTo(0, 0);
   }, []);
   const isProduction = window.location.hostname !== 'localhost';
-  const { runGithub, runUpload, runLocal, loading } = useAuditProps;
+  const { runGithub, runGithubStream, runUpload, runLocal, loading, progress: streamProgress } = useAuditProps;
   const [mode, setMode] = useState('github');
   const [ghUrl, setGhUrl] = useState('https://github.com/albertnsql/lookml-auditor');
   const [ghSub, setGhSub] = useState('mock_project');
@@ -137,17 +137,39 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
 
   async function handleRun() {
     setError(null);
+
+    if (mode === 'github') {
+      // ── GitHub: use real SSE streaming progress ─────────────────────────
+      if (!ghUrl.trim()) { setError('Please enter a GitHub repository URL.'); return; }
+      setAuditProgress({ isRunning: true, stage: 'Connecting...', percent: 2, filesScanned: 0, totalFiles: 0, timeElapsed: 0 });
+
+      const startTime = Date.now();
+      const timerRef = setInterval(() => {
+        setAuditProgress(p => ({ ...p, timeElapsed: Math.floor((Date.now() - startTime) / 1000) }));
+      }, 300);
+
+      try {
+        await runGithubStream(ghUrl.trim(), ghSub.trim());
+        clearInterval(timerRef);
+        setAuditProgress(p => ({ ...p, percent: 100, stage: 'Complete ✓' }));
+        await new Promise(r => setTimeout(r, 400));
+        setAuditProgress(p => ({ ...p, isRunning: false }));
+      } catch (e) {
+        clearInterval(timerRef);
+        setError(e.message || 'An unexpected error occurred.');
+        setAuditProgress(p => ({ ...p, isRunning: false, stage: 'Failed' }));
+      }
+      return;
+    }
+
+    // ── ZIP / Local: retain simulated progress ────────────────────────────
     const lastDuration = parseFloat(localStorage.getItem('lookml_auditor_last_duration') ?? '15');
     const auditStart = Date.now();
-
     setAuditProgress({ isRunning: true, stage: 'Scanning files...', percent: 5, filesScanned: 0, totalFiles: 0, timeElapsed: 0 });
     simulateProgress(lastDuration);
 
     try {
-      if (mode === 'github') {
-        if (!ghUrl.trim()) { setError('Please enter a GitHub repository URL.'); return; }
-        await runGithub(ghUrl.trim(), ghSub.trim());
-      } else if (mode === 'local') {
+      if (mode === 'local') {
         if (!localPath.trim()) { setError('Please enter a local directory path.'); return; }
         if (typeof runLocal !== 'function') {
           setError('Local path mode is not available in the hosted version. Please use GitHub URL or Upload ZIP.');
@@ -164,7 +186,7 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
 
       if (progressTimer.current) clearInterval(progressTimer.current);
       setAuditProgress(p => ({ ...p, percent: 100, stage: 'Complete ✓' }));
-      await new Promise(r => setTimeout(r, 400)); // Smoothly fill bar
+      await new Promise(r => setTimeout(r, 400));
       setAuditProgress(p => ({ ...p, isRunning: false }));
     } catch (e) {
       setError(e.message || 'An unexpected error occurred.');
@@ -534,7 +556,10 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
                     {/* Stage label + elapsed time */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ font: '13px Sora', fontWeight: 600, color: '#1E1B4B' }}>
-                        {auditProgress.stage}
+                        {/* For GitHub mode, prefer the real SSE stage label */}
+                        {mode === 'github' && streamProgress?.stage
+                          ? streamProgress.stage
+                          : auditProgress.stage}
                       </span>
                       <span style={{ font: '12px Inter', color: '#6B7280' }}>
                         {auditProgress.timeElapsed}s elapsed
@@ -547,10 +572,14 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
                       background: '#E2DFF5', borderRadius: '4px',
                       overflow: 'hidden'
                     }}>
-                      {/* Animated fill */}
+                      {/* Animated fill — real pct for GitHub, simulated for others */}
                       <div style={{
                         height: '100%',
-                        width: `${auditProgress.percent}%`,
+                        width: `${
+                          mode === 'github' && streamProgress?.pct
+                            ? streamProgress.pct
+                            : auditProgress.percent
+                        }%`,
                         background: 'linear-gradient(90deg, #635BFF, #818CF8)',
                         borderRadius: '4px',
                         transition: 'width 500ms ease-out',
@@ -570,12 +599,16 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
                     {/* Percent + file count */}
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ font: '12px Inter', color: '#6B7280' }}>
-                        {auditProgress.filesScanned > 0 && auditProgress.totalFiles > 0
-                          ? `${auditProgress.filesScanned} / ${auditProgress.totalFiles} files`
-                          : 'Analyzing...'}
+                        {mode === 'github' && streamProgress?.filesTotal > 0
+                          ? `${streamProgress.filesDone} / ${streamProgress.filesTotal} files`
+                          : auditProgress.filesScanned > 0 && auditProgress.totalFiles > 0
+                            ? `${auditProgress.filesScanned} / ${auditProgress.totalFiles} files`
+                            : 'Analyzing...'}
                       </span>
                       <span style={{ font: '12px Sora', fontWeight: 700, color: '#635BFF' }}>
-                        {auditProgress.percent}%
+                        {mode === 'github' && streamProgress?.pct
+                          ? streamProgress.pct
+                          : auditProgress.percent}%
                       </span>
                     </div>
 

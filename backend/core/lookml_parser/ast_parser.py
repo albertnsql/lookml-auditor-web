@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
 
@@ -327,12 +328,19 @@ def _parse_file(file_path: str) -> tuple[list[LookMLView], list[LookMLExplore]]:
     return views, explores
 
 
-def parse_project(root_path: str) -> LookMLProject:
+def parse_project(root_path: str, progress_callback=None) -> LookMLProject:
     """
-    Walk the directory recursively, parse all .lkml files using lkml.load().
+    Walk the directory recursively, parse all .lkml files using lkml.load()
+    with parallel ThreadPoolExecutor for significant speedup on large repos.
+
     Skips hidden directories and files under 10 bytes.
     Preserves ALL view/explore definitions across files (including duplicates)
     so validators like check_duplicates can detect real conflicts.
+
+    Args:
+        root_path: Path to the LookML project root directory.
+        progress_callback: Optional callable(files_done, files_total) for
+                           streaming progress updates.
 
     Public API is identical to parser.parse_project() — returns LookMLProject.
     """
@@ -340,19 +348,41 @@ def parse_project(root_path: str) -> LookMLProject:
     if not root.exists():
         raise FileNotFoundError(f"Project path does not exist: {root_path}")
 
+    # Collect all eligible .lkml files upfront so we know the total count
+    lkml_files = [
+        f for f in root.rglob("*.lkml")
+        if not any(p.name.startswith(".") for p in f.parents)
+        and f.stat().st_size >= 10
+    ]
+    total_files = len(lkml_files)
+
     all_views: list[LookMLView] = []
     all_explores: list[LookMLExplore] = []
+    files_done = 0
 
-    for file_path in root.rglob("*.lkml"):
-        # Skip hidden directories
-        if any(p.name.startswith(".") for p in file_path.parents):
-            continue
-        if file_path.stat().st_size < 10:
-            continue
+    # Emit initial progress
+    if progress_callback:
+        progress_callback(0, total_files)
 
-        views, explores = _parse_file(str(file_path))
-        all_views.extend(views)
-        all_explores.extend(explores)
+    # Parallel parse — I/O + lkml CPU work runs concurrently across threads.
+    # max_workers=12 is a good ceiling for Render's shared CPU environment.
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        future_to_file = {
+            executor.submit(_parse_file, str(f)): f for f in lkml_files
+        }
+        for future in as_completed(future_to_file):
+            try:
+                views, explores = future.result()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Unexpected parse failure: %s", exc)
+                views, explores = [], []
+
+            all_views.extend(views)
+            all_explores.extend(explores)
+            files_done += 1
+
+            if progress_callback:
+                progress_callback(files_done, total_files)
 
     # Resolve @{Constant} references in sql_table_name using manifest.lkml
     # (reuses the existing helper from parser.py)

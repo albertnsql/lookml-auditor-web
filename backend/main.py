@@ -6,14 +6,14 @@ Parser: lkml AST-based parser (Phase 3 — regex parser removed).
 """
 from __future__ import annotations
 
-import os, sys, shutil, subprocess, tempfile, zipfile, re
+import os, sys, shutil, subprocess, tempfile, zipfile, re, json, asyncio
 from pathlib import Path
 from typing import Optional
 from collections import Counter
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
 # ── Core module path ────────────────────────────────────────────────────────
@@ -123,19 +123,23 @@ class AuditResponse(BaseModel):
     tmp_dir: Optional[str] = None
     source_type: str = "local"
 
-# ── Helper: run full audit pipeline ────────────────────────────────────────
-def _run_audit_pipeline(path: str, tmp_dir: Optional[str] = None, source_type: str = "local") -> AuditResponse:
-    project = parse_project(path)
-    issues_raw = run_all_checks(project)
-    rules = load_suppression_rules(project.root_path)
-    issues_raw, suppressed_count = apply_suppressions(issues_raw, rules, project.root_path)
-
-    health = compute_health_score(issues_raw, project)
-    health_score = health["final_score"]
-    base_score = health["base_score"]
+# ── Helper: build AuditResponse from pre-computed parts ────────────────────
+def _build_audit_response(
+    project: LookMLProject,
+    issues_raw: list,
+    suppressed_count: int,
+    health: dict,
+    cat_scores: dict,
+    tmp_dir: Optional[str] = None,
+    source_type: str = "local",
+) -> AuditResponse:
+    """
+    Shared response builder used by both the sync endpoint and the SSE
+    streaming endpoint so no logic is duplicated.
+    """
+    health_score  = health["final_score"]
+    base_score    = health["base_score"]
     error_penalty = health["error_penalty"]
-
-    cat_scores = compute_category_scores(issues_raw, project)
 
     views_out = []
     for v in project.views:
@@ -220,6 +224,18 @@ def _run_audit_pipeline(path: str, tmp_dir: Optional[str] = None, source_type: s
     return response
 
 
+# ── Helper: run full audit pipeline ────────────────────────────────────────
+def _run_audit_pipeline(path: str, tmp_dir: Optional[str] = None, source_type: str = "local") -> AuditResponse:
+    project = parse_project(path)
+    issues_raw = run_all_checks(project)
+    rules = load_suppression_rules(project.root_path)
+    issues_raw, suppressed_count = apply_suppressions(issues_raw, rules, project.root_path)
+    health = compute_health_score(issues_raw, project)
+    cat_scores = compute_category_scores(issues_raw, project)
+    return _build_audit_response(project, issues_raw, suppressed_count, health, cat_scores, tmp_dir, source_type)
+
+
+
 # ── GitHub clone helper ─────────────────────────────────────────────────────
 def _clone_repo(url: str, subfolder: str = "") -> tuple[str, str]:
     if not shutil.which("git"):
@@ -269,6 +285,117 @@ def audit_github(body: dict):
     except Exception as e:
         shutil.rmtree(tmp_root, ignore_errors=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── SSE Streaming Endpoint ──────────────────────────────────────────────────
+
+@app.post("/api/audit/github/stream")
+async def audit_github_stream(body: dict):
+    """
+    Server-Sent Events endpoint for GitHub audits.
+    Emits real-time progress events so the frontend can show live stage labels
+    and accurate file counts instead of a simulated progress bar.
+
+    Event shape (JSON):
+      { stage: str, pct: int, files_done?: int, files_total?: int }
+    Final event additionally includes the full AuditResponse payload.
+    """
+    url      = (body.get("url") or "").strip()
+    subfolder = (body.get("subfolder") or "").strip()
+
+    if not url:
+        raise HTTPException(status_code=400, detail="GitHub URL is required.")
+
+    async def event_stream():
+        loop = asyncio.get_event_loop()
+
+        def _emit(stage: str, pct: int, **extra) -> str:
+            data = {"stage": stage, "pct": pct, **extra}
+            return f"data: {json.dumps(data)}\n\n"
+
+        try:
+            # Stage 1 — Clone
+            yield _emit("Cloning repository...", 5)
+            local_path, tmp_root = await loop.run_in_executor(None, lambda: _clone_repo(url, subfolder))
+            yield _emit("Discovering LookML files...", 15)
+
+            # Stage 2 — Parse with real file progress
+            parse_state = {"done": 0, "total": 0}
+
+            def _progress(files_done: int, files_total: int):
+                parse_state["done"]  = files_done
+                parse_state["total"] = files_total
+
+            # Run parse_project in a thread so SSE loop stays alive
+            from lookml_parser.ast_parser import parse_project as _parse_project_direct
+            from validators.suppression import load_suppression_rules, apply_suppressions
+            import threading
+
+            project_holder   = []
+            parse_error_holder = []
+
+            def _do_parse():
+                try:
+                    p = _parse_project_direct(local_path, progress_callback=_progress)
+                    project_holder.append(p)
+                except Exception as exc:
+                    parse_error_holder.append(exc)
+
+            parse_thread = threading.Thread(target=_do_parse, daemon=True)
+            parse_thread.start()
+
+            # Drip file-count progress while parsing runs
+            while parse_thread.is_alive():
+                done  = parse_state["done"]
+                total = parse_state["total"] or 1
+                # Scale 15→65% over the parsing phase
+                pct = 15 + int(50 * done / total) if total > 0 else 20
+                yield _emit(
+                    f"Parsing LookML files... ({done}/{total})",
+                    min(pct, 64),
+                    files_done=done,
+                    files_total=parse_state["total"],
+                )
+                await asyncio.sleep(0.4)
+
+            parse_thread.join()
+
+            if parse_error_holder:
+                raise parse_error_holder[0]
+
+            project = project_holder[0]
+            n_files = parse_state["total"]
+            yield _emit(f"Parsed {n_files} files — running validators...", 65, files_done=n_files, files_total=n_files)
+
+            # Stage 3 — Validate
+            yield _emit("Running audit checks...", 70)
+            issues_raw = await loop.run_in_executor(None, lambda: run_all_checks(project))
+
+            yield _emit("Applying suppressions...", 80)
+            rules = load_suppression_rules(project.root_path)
+            issues_raw, suppressed_count = apply_suppressions(issues_raw, rules, project.root_path)
+
+            yield _emit("Computing health score...", 88)
+            health     = compute_health_score(issues_raw, project)
+            cat_scores = compute_category_scores(issues_raw, project)
+
+            yield _emit("Finalizing results...", 95)
+
+            # Build full AuditResponse using the shared helper defined above
+            result = _build_audit_response(
+                project, issues_raw, suppressed_count, health, cat_scores,
+                tmp_dir=tmp_root, source_type="github"
+            )
+
+            yield _emit("Complete ✓", 100, result=result.model_dump())
+
+        except HTTPException as he:
+            yield _emit(f"Error: {he.detail}", -1, error=he.detail)
+        except Exception as exc:
+            yield _emit(f"Error: {str(exc)}", -1, error=str(exc))
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 class LocalAuditRequest(BaseModel):
