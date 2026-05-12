@@ -1,6 +1,6 @@
 // api.js — All fetch helpers for the LookML Auditor API
 
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const BASE = import.meta.env.VITE_API_URL || 'https://lookml-auditor-web.onrender.com/api';
 
 async function _fetch(url, options = {}) {
   const res = await fetch(BASE + url, options);
