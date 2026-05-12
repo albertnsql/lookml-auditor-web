@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import logging
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
 
@@ -364,25 +363,20 @@ def parse_project(root_path: str, progress_callback=None) -> LookMLProject:
     if progress_callback:
         progress_callback(0, total_files)
 
-    # Parallel parse — I/O + lkml CPU work runs concurrently across threads.
-    # max_workers=12 is a good ceiling for Render's shared CPU environment.
-    with ThreadPoolExecutor(max_workers=12) as executor:
-        future_to_file = {
-            executor.submit(_parse_file, str(f)): f for f in lkml_files
-        }
-        for future in as_completed(future_to_file):
-            try:
-                views, explores = future.result()
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Unexpected parse failure: %s", exc)
-                views, explores = [], []
+    # Sequential parse — avoids GIL thrashing on CPU-bound Python parsing work.
+    for f in lkml_files:
+        try:
+            views, explores = _parse_file(str(f))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Unexpected parse failure: %s", exc)
+            views, explores = [], []
 
-            all_views.extend(views)
-            all_explores.extend(explores)
-            files_done += 1
+        all_views.extend(views)
+        all_explores.extend(explores)
+        files_done += 1
 
-            if progress_callback:
-                progress_callback(files_done, total_files)
+        if progress_callback:
+            progress_callback(files_done, total_files)
 
     # Resolve @{Constant} references in sql_table_name using manifest.lkml
     # (reuses the existing helper from parser.py)
