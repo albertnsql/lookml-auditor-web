@@ -6,7 +6,7 @@ Parser: lkml AST-based parser (Phase 3 — regex parser removed).
 """
 from __future__ import annotations
 
-import os, sys, shutil, subprocess, tempfile, zipfile, re, json, asyncio, logging
+import os, sys, shutil, subprocess, tempfile, zipfile, re, json, asyncio
 from pathlib import Path
 from typing import Optional
 from collections import Counter
@@ -15,7 +15,6 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
-from contextlib import asynccontextmanager
 
 # ── Core module path ────────────────────────────────────────────────────────
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -28,49 +27,8 @@ from lookml_parser.models import LookMLProject
 from validators import run_all_checks, compute_health_score, compute_category_scores
 from validators.suppression import load_suppression_rules, apply_suppressions
 
-# ── Keep-Alive Self-Ping (prevents Render free-tier spin-down) ─────────────
-logger = logging.getLogger("uvicorn.error")
-
-KEEP_ALIVE_URL = os.environ.get(
-    "KEEP_ALIVE_URL",
-    "https://lookml-auditor-web.onrender.com/api/health",
-)
-KEEP_ALIVE_INTERVAL = int(os.environ.get("KEEP_ALIVE_INTERVAL_SECONDS", "600"))  # 10 min
-
-async def _keep_alive_loop():
-    """Pings the /api/health endpoint every KEEP_ALIVE_INTERVAL seconds
-    so Render's free-tier instance never idles long enough to spin down."""
-    try:
-        import httpx
-    except ImportError:
-        logger.warning("[keep-alive] httpx not installed — skipping self-ping.")
-        return
-
-    await asyncio.sleep(30)  # let the server fully start before first ping
-    async with httpx.AsyncClient(timeout=10) as client:
-        while True:
-            try:
-                resp = await client.get(KEEP_ALIVE_URL)
-                logger.info(f"[keep-alive] ping → {resp.status_code}")
-            except Exception as exc:
-                logger.warning(f"[keep-alive] ping failed: {exc}")
-            await asyncio.sleep(KEEP_ALIVE_INTERVAL)
-
-
-@asynccontextmanager
-async def _lifespan(app):
-    """FastAPI lifespan: starts keep-alive task on startup, cancels on shutdown."""
-    task = asyncio.create_task(_keep_alive_loop())
-    yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
-
-
 # ── FastAPI App ─────────────────────────────────────────────────────────────
-app = FastAPI(title="LookML Auditor API", version="2.0.0", lifespan=_lifespan)
+app = FastAPI(title="LookML Auditor API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
