@@ -163,6 +163,16 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
     }
 
     // ── ZIP / Local: retain simulated progress ────────────────────────────
+    if (mode === 'local') {
+      if (!localPath.trim()) { setError('Please enter a local directory path.'); return; }
+      if (typeof runLocal !== 'function') {
+        setError('Local path mode is not available in the hosted version. Please use GitHub URL or Upload ZIP.');
+        return;
+      }
+    } else {
+      if (!zipFile) { setError('Please select a ZIP file.'); return; }
+    }
+
     const lastDuration = parseFloat(localStorage.getItem('lookml_auditor_last_duration') ?? '15');
     const auditStart = Date.now();
     setAuditProgress({ isRunning: true, stage: 'Scanning files...', percent: 5, filesScanned: 0, totalFiles: 0, timeElapsed: 0 });
@@ -170,14 +180,8 @@ export default function LandingPage({ onAuditDone, useAuditProps }) {
 
     try {
       if (mode === 'local') {
-        if (!localPath.trim()) { setError('Please enter a local directory path.'); return; }
-        if (typeof runLocal !== 'function') {
-          setError('Local path mode is not available in the hosted version. Please use GitHub URL or Upload ZIP.');
-          return;
-        }
         await runLocal(localPath.trim());
       } else {
-        if (!zipFile) { setError('Please select a ZIP file.'); return; }
         await runUpload(zipFile);
       }
 

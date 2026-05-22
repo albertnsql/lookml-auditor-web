@@ -186,6 +186,11 @@ def _check_join(join: LookMLJoin, explore: LookMLExplore,
             source_file=join.source_file,
             line_number=join.line_number,
             suggestion="Add 'relationship: many_to_one' (or appropriate type) to avoid fanout issues.",
+            fix_payload={
+                "line_number": join.line_number + 1,
+                "insert_text": "    relationship: many_to_one",
+                "replace_lines": 0
+            }
         ))
 
     return issues

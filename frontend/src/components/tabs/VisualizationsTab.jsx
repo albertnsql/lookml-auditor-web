@@ -221,9 +221,9 @@ export default function VisualizationsTab({ result, onExploreClick }) {
     // Count how many explores reference each view
     const viewExploreCount = {};
     activeExplores.forEach(explore => {
-      (explore.joins ?? []).forEach(join => {
-        const viewName = join.from_view ?? join.name;
-        if (viewName) viewExploreCount[viewName] = (viewExploreCount[viewName] ?? 0) + 1;
+      const viewsInExplore = new Set([explore.base_view, ...(explore.joins ?? []).map(j => j.resolved_view)]);
+      viewsInExplore.forEach(v => {
+        if (v) viewExploreCount[v] = (viewExploreCount[v] ?? 0) + 1;
       });
     });
 
@@ -651,12 +651,12 @@ export default function VisualizationsTab({ result, onExploreClick }) {
             </div>
 
             {/* Tooltip JSX */}
-            {hoveredExplore && (
+            {hoveredExplore && createPortal((
               <div style={{
                 position: 'fixed',
                 left: tooltipPos.x,
                 top: tooltipPos.y,
-                zIndex: 100,
+                zIndex: 9999,
                 background: '#1E1B4B',
                 color: 'white',
                 borderRadius: '10px',
@@ -724,7 +724,7 @@ export default function VisualizationsTab({ result, onExploreClick }) {
                   )}
                 </div>
               </div>
-            )}
+            ), document.body)}
 
           </div>
         </div>
@@ -1075,10 +1075,10 @@ export default function VisualizationsTab({ result, onExploreClick }) {
                 )}
 
                 {/* Tooltip */}
-                {hoveredBucket && (
+                {hoveredBucket && createPortal((
                   <div style={{
                     position: 'fixed', left: tooltipPos.x, top: tooltipPos.y,
-                    zIndex: 100, background: '#1E1B4B', color: 'white',
+                    zIndex: 9999, background: '#1E1B4B', color: 'white',
                     borderRadius: '10px', padding: '10px 14px',
                     border: '1px solid rgba(99,91,255,0.4)',
                     boxShadow: '0 8px 24px rgba(99,91,255,0.25)',
@@ -1101,7 +1101,7 @@ export default function VisualizationsTab({ result, onExploreClick }) {
                       </div>
                     )}
                   </div>
-                )}
+                ), document.body)}
 
               </div>
             );

@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { RULES } from '../../data/rules';
+import { api } from '../../api';
+import FixPreviewModal from '../modals/FixPreviewModal';
 
-const gridCols = '84px 140px 140px 1fr 130px 48px';
+const gridCols = '84px 140px 140px 1fr 130px 48px 80px';
 
 export default function IssuesTab({ auditData, isLoading, externalFilters, onFilterChange, onOpenInFileViewer }) {
   const { issues } = auditData;
@@ -13,6 +15,14 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
   const [isBlastRadiusOpen, setIsBlastRadiusOpen] = useState(false);
   const [isDeadCodeOpen, setIsDeadCodeOpen] = useState(false);
   const [drawerSearch, setDrawerSearch] = useState('');
+  const [fixedIssues, setFixedIssues] = useState(new Set());
+  const [fixingIssue, setFixingIssue] = useState(null);
+  const [previewIssue, setPreviewIssue] = useState(null);
+
+  const handleFixConfirm = (issue) => {
+    setFixedIssues(prev => new Set(prev).add(issue));
+    setPreviewIssue(null);
+  };
 
   // Sync selectedFile with filters.file
   useEffect(() => {
@@ -197,6 +207,14 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
     return issues;
   }, [auditData, filters]);
 
+  const filteredGroups = useMemo(() => groupBy(filteredIssues, i => (i.source_file || 'unknown').split(/[/\\]/).pop()), [filteredIssues]);
+  const sortedFilesKeys = useMemo(() => Object.keys(filteredGroups).sort((a,b) => filteredGroups[b].length - filteredGroups[a].length), [filteredGroups]);
+
+  const [collapsedGroups, setCollapsedGroups] = useState({});
+  const toggleGroup = (file) => setCollapsedGroups(prev => ({ ...prev, [file]: !prev[file] }));
+
+  const [expandedId, setExpandedId] = useState(null);
+
   if (isLoading) {
     return (
       <div style={{
@@ -230,14 +248,6 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
       return { ...f, severity: newSev };
     });
   };
-
-  const filteredGroups = useMemo(() => groupBy(filteredIssues, i => (i.source_file || 'unknown').split(/[/\\]/).pop()), [filteredIssues]);
-  const sortedFilesKeys = useMemo(() => Object.keys(filteredGroups).sort((a,b) => filteredGroups[b].length - filteredGroups[a].length), [filteredGroups]);
-
-  const [collapsedGroups, setCollapsedGroups] = useState({});
-  const toggleGroup = (file) => setCollapsedGroups(prev => ({ ...prev, [file]: !prev[file] }));
-
-  const [expandedId, setExpandedId] = useState(null);
 
   const sortOrder = { error: 0, warning: 1, info: 2 };
 
@@ -569,7 +579,7 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', overflowX: 'auto' }}>
           <div style={{ minWidth: '850px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: '16px', background: 'var(--bg)', borderBottom: '1px solid var(--border)', padding: '10px 20px', fontSize: '11px', fontFamily: 'Sora, sans-serif', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-2)', fontWeight: 600 }}>
-              <div>Severity</div><div>Category</div><div>Object</div><div>Message</div><div>File</div><div>Line</div>
+              <div>Severity</div><div>Category</div><div>Object</div><div>Message</div><div>File</div><div>Line</div><div>Action</div>
             </div>
 
           {filteredIssues.length === 0 ? (
@@ -615,6 +625,9 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
                             isExpanded={expandedId === (issue.id || `${filename}-${idx}`)}
                             onToggle={() => setExpandedId(expandedId === (issue.id || `${filename}-${idx}`) ? null : (issue.id || `${filename}-${idx}`))}
                             onOpenInFileViewer={onOpenInFileViewer}
+                            isFixed={fixedIssues.has(issue)}
+                            isFixing={false}
+                            onFix={() => setPreviewIssue(issue)}
                           />
                         ))}
                       </div>
@@ -688,6 +701,14 @@ export default function IssuesTab({ auditData, isLoading, externalFilters, onFil
           onOpenFileViewer={onOpenInFileViewer}
         />
       </InsightDrawer>
+
+      {previewIssue && (
+        <FixPreviewModal 
+          issue={previewIssue} 
+          onClose={() => setPreviewIssue(null)} 
+          onConfirm={handleFixConfirm} 
+        />
+      )}
     </div>
   );
 }
@@ -899,7 +920,7 @@ function SevPill({ type, active, onClick }) {
   );
 }
 
-function IssueRow({ issue, isAlt, isExpanded, onToggle, onOpenInFileViewer }) {
+function IssueRow({ issue, isAlt, isExpanded, onToggle, onOpenInFileViewer, isFixed, isFixing, onFix }) {
   const [hovered, setHovered] = useState(false);
 
   const isErr = issue.severity === 'error';
@@ -949,6 +970,25 @@ function IssueRow({ issue, isAlt, isExpanded, onToggle, onOpenInFileViewer }) {
         <div style={{ fontSize: '12px', color: 'var(--text-3)', fontFamily: "'Fira Code', monospace", display: 'flex', alignItems: 'center', gap: '4px' }}>
           {issue.line_number || '-'}
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="{isExpanded ? '18 15 12 9 6 15' : '6 9 12 15 18 9'}"/></svg>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          {issue.fix_payload ? (
+            isFixed ? (
+              <span style={{ color: 'var(--success)', fontWeight: 'bold', fontSize: '11px' }}>✓ Fixed</span>
+            ) : (
+              <button
+                className="btn btn-primary"
+                style={{ padding: '2px 8px', fontSize: '11px', borderRadius: '4px', opacity: isFixing ? 0.5 : 1 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFix();
+                }}
+                disabled={isFixing}
+              >
+                {isFixing ? '...' : 'Fix Now'}
+              </button>
+            )
+          ) : null}
         </div>
       </div>
       

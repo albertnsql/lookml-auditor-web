@@ -138,15 +138,18 @@ export default function Dashboard({ auditData, isLoading, onReset }) {
                   </span>
                   <span style={{ flex: 1 }}>{item.label}</span>
                   {item.id === 'issues' && auditData.issues.length > 0 && (
-                    <span className="nav-issues-badge" style={{
-                      background: 'var(--accent)', color: '#fff',
-                      borderRadius: '10px', fontSize: '11px', fontWeight: 600,
-                      padding: '2px 8px', fontFamily: 'Sora, sans-serif',
-                      fontVariantNumeric: 'tabular-nums',
-                      animation: 'pulseGlow 2.5s ease infinite',
-                    }}>
-                      {auditData.issues.length}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+                      <span className="nav-issues-badge" style={{
+                        background: 'var(--accent)', color: '#fff',
+                        borderRadius: '10px', fontSize: '11px', fontWeight: 600,
+                        padding: '2px 8px', fontFamily: 'Sora, sans-serif',
+                        fontVariantNumeric: 'tabular-nums',
+                        animation: 'pulseGlow 2.5s ease infinite',
+                      }}>
+                        {auditData.issues.length}
+                      </span>
+                      <span style={{ fontSize: '8px', color: isActive ? 'var(--accent)' : 'var(--text-3)', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total</span>
+                    </div>
                   )}
                 </button>
               );

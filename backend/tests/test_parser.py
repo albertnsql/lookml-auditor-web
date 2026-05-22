@@ -185,6 +185,19 @@ class TestParseManifest:
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
+    def test_parses_constant_with_complex_sql(self):
+        tmpdir = tempfile.mkdtemp()
+        try:
+            (Path(tmpdir) / "manifest.lkml").write_text(textwrap.dedent("""\
+                constant: Calendar_Month {
+                  value: "CASE WHEN ${TABLE}.FISCALMONTH = 1 THEN 'JAN' END"
+                }
+            """), encoding="utf-8")
+            constants = parse_manifest(tmpdir)
+            assert constants.get("Calendar_Month") == "CASE WHEN ${TABLE}.FISCALMONTH = 1 THEN 'JAN' END"
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
     def test_parses_multiple_constants(self):
         tmpdir = tempfile.mkdtemp()
         try:

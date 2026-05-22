@@ -97,6 +97,13 @@ export const api = {
   getFileContent: (path) =>
     _fetch('/audit/file?' + new URLSearchParams({ path })),
 
+  auditFix: (path, fixPayload) =>
+    _fetch('/audit/fix', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, fix_payload: fixPayload }),
+    }),
+
   cleanup: () => _fetch('/audit/cleanup', { method: 'DELETE' }),
 };
 
