@@ -1,6 +1,26 @@
 import { useState, useEffect } from 'react';
 import { scoreMeta } from '../../utils';
 
+// ── Count-up hook ────────────────────────────────────────────
+function useCountUp(target, duration = 600, delay = 0) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (typeof target !== 'number') return;
+    let raf;
+    function easeOutQuart(t) { return 1 - Math.pow(1 - t, 4); }
+    const start = performance.now();
+    function tick(now) {
+      const elapsed = Math.max(0, now - start - delay);
+      const progress = Math.min(elapsed / duration, 1);
+      setVal(Math.round(easeOutQuart(progress) * target));
+      if (progress < 1) raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration, delay]);
+  return val;
+}
+
 export default function OverviewTab({ result }) {
   const { health_score, error_penalty, category_scores, issues } = result;
   const { color: hsColor, label: hsLabel } = scoreMeta(health_score);
@@ -173,10 +193,11 @@ function RadialScoreCard({ score, catScores, errCount = 0, penalty = 0 }) {
   const pathLength = Math.PI * r;
 
   useEffect(() => {
-    const t = setTimeout(() => setAnimScore(score), 50);
+    const t = setTimeout(() => setAnimScore(score), 650);
     return () => clearTimeout(t);
   }, [score]);
 
+  const displayedScore = useCountUp(score, 900, 650);
   const offset = pathLength - (animScore / 100) * pathLength;
   const ticks = [70, 80, 90];
 
@@ -212,7 +233,7 @@ function RadialScoreCard({ score, catScores, errCount = 0, penalty = 0 }) {
 
           {/* Score Text */}
           <text x={cx} y={118} textAnchor="middle" fontSize="52" fontWeight="700" fill="var(--text-1)" fontFamily="Sora, sans-serif">
-            {score}
+            {displayedScore}
             <tspan fontSize="18" fill="var(--text-3)" dy="-18" fontWeight="600"> / 100</tspan>
           </text>
         </svg>
@@ -243,10 +264,11 @@ function RadialScoreCard({ score, catScores, errCount = 0, penalty = 0 }) {
 function ScorePill({ label, score }) {
   const [w, setW] = useState(0);
   useEffect(() => {
-    const t = setTimeout(() => setW(score), 50);
+    const t = setTimeout(() => setW(score), 650);
     return () => clearTimeout(t);
   }, [score]);
 
+  const displayedScore = useCountUp(score, 500, 650);
   const { color } = scoreMeta(score);
   
   const displayLabel = label === 'Broken Reference'     ? 'BROKEN REFERENCE' :
@@ -262,7 +284,7 @@ function ScorePill({ label, score }) {
           {displayLabel}
         </span>
         <span style={{ fontSize: '20px', fontFamily: 'Sora, sans-serif', fontWeight: 700, color }}>
-          {score}
+          {displayedScore}
         </span>
       </div>
       <div style={{ width: '100%', height: '5px', background: '#DDD9F0', borderRadius: '2.5px', overflow: 'hidden' }}>
@@ -338,12 +360,13 @@ function SeverityDonut({ err, wrn, inf, total }) {
   const [iD, setID] = useState(0);
 
   useEffect(() => {
-    const t1 = setTimeout(() => setED(eLen), 250);
-    const t2 = setTimeout(() => setWD(wLen), 250 + 250);
-    const t3 = setTimeout(() => setID(iLen), 250 + 250 + 500);
+    const t1 = setTimeout(() => setED(eLen), 650);
+    const t2 = setTimeout(() => setWD(wLen), 650 + 250);
+    const t3 = setTimeout(() => setID(iLen), 650 + 250 + 500);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [eLen, wLen, iLen]);
 
+  const displayedTotal = useCountUp(total, 600, 650);
   const eRot = -90;
   const wRot = eRot + (eLen > 0 ? (eLen + GAP)/C * 360 : 0);
   const iRot = wRot + (wLen > 0 ? (wLen + GAP)/C * 360 : 0);
@@ -362,7 +385,7 @@ function SeverityDonut({ err, wrn, inf, total }) {
           strokeDasharray={`${iD} ${C}`} strokeLinecap="butt"
           style={{ transform: `rotate(${iRot}deg)`, transformOrigin: `${cx}px ${cy}px`, transition: 'stroke-dasharray 350ms ease-out' }} />}
         
-        <text x={cx} y={cy - 2} textAnchor="middle" fontSize="32" fontWeight="700" fontFamily="Sora, sans-serif" fill="var(--text-1)">{total}</text>
+        <text x={cx} y={cy - 2} textAnchor="middle" fontSize="32" fontWeight="700" fontFamily="Sora, sans-serif" fill="var(--text-1)">{displayedTotal}</text>
         <text x={cx} y={cy + 18} textAnchor="middle" fontSize="11" fill="var(--text-3)" fontFamily="Sora, sans-serif">issues</text>
       </svg>
     </div>

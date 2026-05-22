@@ -58,6 +58,9 @@ export default function Dashboard({ auditData, isLoading, onReset }) {
       case 'orphan_views':
         setIssueFilters(f => ({ ...f, severity: ['error', 'warning', 'info'], category: 'Field Quality', search: 'orphan' }));
         break;
+      case 'zombies':
+        setIssueFilters(f => ({ ...f, severity: ['error', 'warning', 'info'], category: 'Broken Reference', search: 'does not exist' }));
+        break;
       case 'missing_pk':
         setIssueFilters(f => ({ ...f, severity: ['error', 'warning', 'info'], category: 'all', search: 'primary_key' }));
         break;
@@ -70,6 +73,10 @@ export default function Dashboard({ auditData, isLoading, onReset }) {
       default:
         break;
     }
+
+    setTimeout(() => {
+      document.getElementById('issues-table')?.scrollIntoView({ behavior: 'smooth' });
+    }, 150);
   };
 
   const handleExploreFilter = (exploreName) => {

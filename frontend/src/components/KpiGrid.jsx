@@ -103,7 +103,7 @@ export default function KpiGrid({ result, filters, onKpiClick }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', width: '100%' }}>
         {[
           { label: 'Orphan Views', value: orphans.length, valueColor: orphans.length > 0 ? 'var(--warning)' : 'var(--text-1)', onClick: () => onKpiClick?.('orphan_views') },
-          { label: 'Zombies', value: zombies.length, valueColor: zombies.length > 0 ? 'var(--error)' : 'var(--text-1)' },
+          { label: 'Zombies', value: zombies.length, valueColor: zombies.length > 0 ? 'var(--error)' : 'var(--text-1)', onClick: () => onKpiClick?.('zombies') },
           { label: 'Missing PK', value: missingPk.length, valueColor: missingPk.length > 0 ? 'var(--warning)' : 'var(--text-1)', onClick: () => onKpiClick?.('missing_pk') },
           { label: 'No Label', value: noLabel.length, valueColor: 'var(--text-2)', onClick: () => onKpiClick?.('no_label') },
           { label: 'No Description', value: noDesc.length, valueColor: 'var(--text-2)', onClick: () => onKpiClick?.('no_description') },
@@ -288,7 +288,7 @@ function KpiCard({ label, value, valueColor = 'var(--text-1)', dur = 600, delay 
 function DarkTooltip({ text }) {
   return (
     <div style={{
-      position: 'absolute', bottom: 'calc(100% + 10px)', right: 0,
+      position: 'absolute', top: 'calc(100% + 10px)', right: 0,
       background: '#1E1B4B', color: '#FFFFFF',
       border: '2px solid rgba(99,91,255,0.6)',
       borderRadius: '10px', padding: '10px 14px',
@@ -302,11 +302,11 @@ function DarkTooltip({ text }) {
       {text}
       {/* Arrow */}
       <div style={{
-        position: 'absolute', bottom: -7, right: 8,
+        position: 'absolute', top: -7, right: 8,
         width: 0, height: 0,
         borderLeft: '6px solid transparent',
         borderRight: '6px solid transparent',
-        borderTop: '7px solid #1E1B4B',
+        borderBottom: '7px solid #1E1B4B',
       }} />
     </div>
   );
