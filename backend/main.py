@@ -97,6 +97,7 @@ class IssueOut(BaseModel):
     suggestion: str = ""
     source_file: str = ""
     line_number: Optional[int] = None
+    fix_payload: Optional[dict] = None
 
 class ProjectSummary(BaseModel):
     name: str
@@ -191,6 +192,7 @@ def _build_audit_response(
             suggestion=getattr(i, "suggestion", ""),
             source_file=i.source_file or "",
             line_number=getattr(i, "line_number", None),
+            fix_payload=getattr(i, "fix_payload", None),
         ))
 
     response = AuditResponse(
@@ -476,3 +478,42 @@ def cleanup_clone():
     shutil.rmtree(tmp_dir, ignore_errors=True)
     _audit_state["tmp_dir"] = None
     return {"status": "deleted", "path": tmp_dir}
+
+
+class FixRequest(BaseModel):
+    path: str
+    fix_payload: dict
+    replace_lines: int = 0
+
+@app.post("/api/audit/fix")
+def apply_fix(body: FixRequest):
+    p = Path(body.path)
+    if not p.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {body.path}")
+    
+    try:
+        lines = p.read_text(encoding="utf-8").splitlines()
+        
+        # apply the fix based on payload
+        # e.g., payload = {"line_number": 12, "insert_text": "    primary_key: yes"}
+        line_num = body.fix_payload.get("line_number")
+        insert_text = body.fix_payload.get("insert_text")
+        
+        if line_num is not None and insert_text is not None:
+            # line_num is 1-indexed
+            idx = line_num - 1
+            if 0 <= idx <= len(lines):
+                replace_lines = body.fix_payload.get("replace_lines", 0)
+                if replace_lines > 0:
+                    del lines[idx:idx + replace_lines]
+                lines.insert(idx, insert_text)
+                p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                return {"status": "success", "message": "Fix applied"}
+            else:
+                raise HTTPException(status_code=400, detail="Invalid line number")
+        else:
+            raise HTTPException(status_code=400, detail="Invalid fix payload format")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

@@ -4,6 +4,7 @@ Issue model — the shared output type for all validators.
 from __future__ import annotations
 from enum import Enum
 from pydantic import BaseModel
+from typing import Optional
 
 
 class Severity(str, Enum):
@@ -30,6 +31,7 @@ class Issue(BaseModel):
     source_file: str = ""
     line_number: int = 0
     suggestion: str = ""
+    fix_payload: Optional[dict] = None
 
     def __str__(self) -> str:
         loc = f" ({self.source_file}:{self.line_number})" if self.source_file else ""

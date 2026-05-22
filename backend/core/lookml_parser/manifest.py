@@ -11,24 +11,20 @@ Public API:
 from __future__ import annotations
 
 import re
+import lkml
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Compiled patterns (module-level — compiled once)
-# ---------------------------------------------------------------------------
-
-_RE_COMMENT = re.compile(r'#[^\n]*')
-
-_CONSTANT_RE = re.compile(
-    r'constant\s*:\s*(\w+)\s*\{[^}]*?value\s*:\s*["\']([^"\']+)["\']',
-    re.DOTALL
-)
 _CONST_REF_RE = re.compile(r'@\{(\w+)\}')
 
-
-# ---------------------------------------------------------------------------
-# Public functions
-# ---------------------------------------------------------------------------
+def _strip_quotes(value: str) -> str:
+    """Strip surrounding double or single quotes."""
+    if not isinstance(value, str):
+        return str(value)
+    v = value.strip()
+    if len(v) >= 2 and ((v.startswith('"') and v.endswith('"')) or
+                        (v.startswith("'") and v.endswith("'"))):
+        v = v[1:-1]
+    return v
 
 def parse_manifest(root_path: str) -> dict[str, str]:
     """
@@ -49,10 +45,18 @@ def parse_manifest(root_path: str) -> dict[str, str]:
 
     for candidate in candidates:
         if candidate.exists():
-            text = _RE_COMMENT.sub('', candidate.read_text(encoding="utf-8", errors="replace"))
-            for name, value in _CONSTANT_RE.findall(text):
-                constants[name] = value
-            break
+            try:
+                text = candidate.read_text(encoding="utf-8", errors="replace")
+                parsed = lkml.load(text)
+                if isinstance(parsed, dict):
+                    for const_dict in parsed.get("constants", []):
+                        name = const_dict.get("name")
+                        val = const_dict.get("value")
+                        if name and val is not None:
+                            constants[name] = _strip_quotes(val)
+                break
+            except Exception:
+                pass
 
     return constants
 

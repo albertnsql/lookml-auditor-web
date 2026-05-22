@@ -1,10 +1,7 @@
 """
 Validator: Field Documentation Quality
 ----------------------------------------
-Optimised single-pass: instead of generating one Issue per field (which creates
-tens of thousands of Issue objects for large repos), we generate one summary
-Issue per VIEW listing missing counts. This dramatically reduces object allocation.
-
+Flags fields that are missing label or description.
 Hidden fields are excluded. Only dimensions, dimension_groups, and measures checked.
 """
 from __future__ import annotations
@@ -23,28 +20,31 @@ def check_field_documentation(project: LookMLProject) -> list[Issue]:
         for field in view.fields:
             if field.hidden or field.field_type not in ELIGIBLE:
                 continue
-            if not field.label:       missing_label.append(field.name)
-            if not field.description: missing_desc.append(field.name)
-
-        if missing_label or missing_desc:
-            parts = []
-            if missing_label:
-                parts.append(f"{len(missing_label)} field(s) missing label")
-            if missing_desc:
-                parts.append(f"{len(missing_desc)} field(s) missing description")
-
-            issues.append(Issue(
-                category=IssueCategory.FIELD_QUALITY,
-                severity=Severity.INFO,
-                message=f"View '{view.name}': {'; '.join(parts)}",
-                object_type="view",
-                object_name=view.name,
-                source_file=view.source_file,
-                line_number=view.line_number,
-                suggestion=(
-                    f"Add label/description to fields in '{view.name}' "
-                    "to improve Looker UI discoverability."
-                ),
-            ))
+            
+            missing_items = []
+            if not field.label:
+                missing_items.append("label")
+            if not field.description:
+                missing_items.append("description")
+                
+            if missing_items:
+                issues.append(Issue(
+                    category=IssueCategory.FIELD_QUALITY,
+                    severity=Severity.INFO,
+                    message=f"Field '{field.name}' in view '{view.name}' is missing {', '.join(missing_items)}",
+                    object_type="field",
+                    object_name=f"{view.name}.{field.name}",
+                    source_file=view.source_file,
+                    line_number=field.line_number,
+                    suggestion=f"Add {', '.join(missing_items)} to improve Looker UI discoverability.",
+                    fix_payload={
+                        "line_number": field.line_number + 1,
+                        "insert_text": "".join([
+                            f"    label: \"{field.name.replace('_', ' ').title()}\"\n" if "label" in missing_items else "",
+                            f"    description: \"{field.name.replace('_', ' ').title()} description\"\n" if "description" in missing_items else ""
+                        ]).rstrip("\n"),
+                        "replace_lines": 0
+                    }
+                ))
 
     return issues
