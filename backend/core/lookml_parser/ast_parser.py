@@ -251,10 +251,7 @@ def _parse_explore(explore_dict: dict, source_file: str) -> Optional[LookMLExplo
 # File Parsing
 # ---------------------------------------------------------------------------
 
-_RE_VIEW = re.compile(r'^\s*view:\s*(\w+)')
-_RE_EXPLORE = re.compile(r'^\s*explore:\s*(\w+)')
-_RE_FIELD = re.compile(r'^\s*(dimension|dimension_group|measure|filter|parameter):\s*(\w+)')
-_RE_JOIN = re.compile(r'^\s*join:\s*(\w+)')
+_RE_ALL = re.compile(r'^\s*(view|explore|join|dimension|dimension_group|measure|filter|parameter):\s*(\w+)')
 
 def build_line_map(raw_text: str) -> dict[tuple[str, str], int]:
     """
@@ -263,22 +260,13 @@ def build_line_map(raw_text: str) -> dict[tuple[str, str], int]:
     """
     line_map = {}
     for i, line in enumerate(raw_text.splitlines(), start=1):
-        m = _RE_VIEW.search(line)
+        m = _RE_ALL.search(line)
         if m:
-            line_map[("view", m.group(1))] = i
-            continue
-        m = _RE_EXPLORE.search(line)
-        if m:
-            line_map[("explore", m.group(1))] = i
-            continue
-        m = _RE_JOIN.search(line)
-        if m:
-            line_map[("join", m.group(1))] = i
-            continue
-        m = _RE_FIELD.search(line)
-        if m:
-            line_map[("field", m.group(2))] = i
-            continue
+            item_type = m.group(1)
+            item_name = m.group(2)
+            if item_type in ('dimension', 'dimension_group', 'measure', 'filter', 'parameter'):
+                item_type = 'field'
+            line_map[(item_type, item_name)] = i
     return line_map
 
 def _parse_file(file_path: str) -> tuple[list[LookMLView], list[LookMLExplore]]:
