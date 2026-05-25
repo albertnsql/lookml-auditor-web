@@ -14,15 +14,6 @@ def check_primary_keys(project: LookMLProject) -> list[Issue]:
 
     for view in project.views:
         if not view.has_primary_key:
-            fix_payload = None
-            if view.dimensions:
-                candidate = next((d for d in view.dimensions if d.name.endswith("_id")), view.dimensions[0])
-                if candidate and candidate.line_number:
-                    fix_payload = {
-                        "line_number": candidate.line_number + 1,
-                        "insert_text": "    primary_key: yes"
-                    }
-
             issues.append(Issue(
                 category=IssueCategory.FIELD_QUALITY,
                 severity=Severity.WARNING,
@@ -35,7 +26,7 @@ def check_primary_keys(project: LookMLProject) -> list[Issue]:
                     f"Add 'primary_key: yes' to the unique identifier dimension in view '{view.name}'. "
                     "This prevents fanout and ensures correct COUNT DISTINCT behavior."
                 ),
-                fix_payload=fix_payload
+                fix_payload=None
             ))
 
     return issues
